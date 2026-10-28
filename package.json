@@ -15,9 +15,21 @@
     "format": "turbo run format --parallel",
     "format:check": "turbo run format:check --parallel",
     "typecheck": "turbo run typecheck --parallel",
-    "test": "turbo run test --parallel"
+    "test": "turbo run test --parallel",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset",
+    "db:types": "supabase gen types typescript --local > packages/api/src/database.types.ts",
+    "db:test": "supabase test db",
+    "db:lint": "supabase db lint",
+    "db:new": "supabase migration new"
   },
   "devDependencies": {
+    "@supabase/cli": "^1.120.0",
+    "supabase": "^1.120.0",
     "turbo": "^2.0.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
   }
 }
