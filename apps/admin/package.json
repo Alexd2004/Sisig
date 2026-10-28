@@ -1,0 +1,18 @@
+{
+  "name": "@sisig/admin",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo 'Admin app framework TBD in ADM-01'",
+    "build": "echo 'Build placeholder'",
+    "lint": "echo 'Lint placeholder'",
+    "format": "echo 'Format placeholder'",
+    "format:check": "echo 'Format check placeholder'",
+    "typecheck": "echo 'Typecheck placeholder'",
+    "test": "echo 'Test placeholder'"
+  },
+  "devDependencies": {
+    "@sisig/config": "*",
+    "typescript": "^5.3.0"
+  }
+}

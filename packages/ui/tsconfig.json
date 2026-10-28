@@ -1,0 +1,7 @@
+{
+  "extends": "@sisig/config/tsconfig.json",
+  "compilerOptions": {
+    "jsx": "react-native"
+  },
+  "include": ["src"]
+}

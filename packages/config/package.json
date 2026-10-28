@@ -1,0 +1,15 @@
+{
+  "name": "@sisig/config",
+  "version": "1.0.0",
+  "private": true,
+  "exports": {
+    "./eslint": "./eslint.config.js",
+    "./tsconfig": "./tsconfig.json",
+    "./prettier": "./prettier.config.js"
+  },
+  "files": [
+    "eslint.config.js",
+    "prettier.config.js",
+    "tsconfig.json"
+  ]
+}

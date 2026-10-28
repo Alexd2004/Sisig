@@ -1,0 +1,23 @@
+{
+  "name": "sisig",
+  "version": "1.0.0",
+  "description": "Mobile platform: Expo app + admin panel + shared packages",
+  "private": true,
+  "packageManager": "pnpm@9.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "lint": "turbo run lint --parallel",
+    "format": "turbo run format --parallel",
+    "format:check": "turbo run format:check --parallel",
+    "typecheck": "turbo run typecheck --parallel",
+    "test": "turbo run test --parallel"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0"
+  }
+}

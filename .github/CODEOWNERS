@@ -1,0 +1,18 @@
+# Global owners
+* @Alexd2004
+
+# Mobile app and UI components
+apps/mobile/** @Alexd2004
+packages/ui/** @Alexd2004
+
+# Admin panel and GitHub workflows
+apps/admin/** @Alexd2004
+.github/** @Alexd2004
+
+# Supabase configuration
+supabase/** @Alexd2004
+
+# Root and config
+package.json @Alexd2004
+turbo.json @Alexd2004
+packages/config/** @Alexd2004
