@@ -14,3 +14,18 @@ export {
   explainCode,
 } from './code-analyzer';
 export type { CodeAnalysis } from './code-analyzer';
+export {
+  translateText,
+  detectLanguage,
+  translateToMultipleLanguages,
+  SUPPORTED_LANGUAGES,
+} from './translator';
+export type { Language, TranslationResult } from './translator';
+export {
+  generateAPIDocs,
+  generateREADME,
+  generateTestCases,
+  generateChangelog,
+  generateContributingGuide,
+} from './doc-generator';
+export type { DocGenerationOptions } from './doc-generator';
