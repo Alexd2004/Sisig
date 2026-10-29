@@ -9,15 +9,14 @@ on:
       - main
 
 jobs:
-  # Lint, typecheck, and unit tests with Turborepo caching
+  # Lint, typecheck, and unit tests. Turbo task outputs are restored from the
+  # previous run's cache (CI runners do not keep .turbo/cache between runs).
   lint-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Full history for Turborepo
 
       - uses: pnpm/action-setup@v2
         with:
@@ -27,6 +26,14 @@ jobs:
         with:
           node-version: 18
           cache: pnpm
+
+      - name: Restore Turborepo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -174,34 +181,31 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check for service-role key in bundle
+      # Both checks use git grep over tracked files under apps/ and packages/
+      # (client code, including apps/mobile/app). Exit codes: 0 = match (fail),
+      # 1 = no match (pass), anything else = grep error (fail). The earlier
+      # `if grep ...; then` form treated a grep error (a missing path such as
+      # apps/admin/src) as "no match" and passed.
+      - name: Check for service-role key or JWT pattern in client code
         run: |
-          if grep -r "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" \
-            apps/mobile/src \
-            apps/admin/src \
-            packages/api/src \
-            --include="*.ts" \
-            --include="*.tsx" \
-            --include="*.js" \
-            --include="*.jsx"; then
-            echo "✗ Service-role key or JWT pattern found in source code"
-            exit 1
-          else
-            echo "✓ No service-role keys detected in bundle"
-          fi
+          set +e
+          git grep -n -I -F -e "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" -- apps packages
+          rc=$?
+          set -e
+          case "$rc" in
+            0) echo "✗ Service-role key or JWT pattern found in client code"; exit 1 ;;
+            1) echo "✓ No service-role key or JWT patterns in client code" ;;
+            *) echo "✗ git grep failed with exit code $rc"; exit 1 ;;
+          esac
 
       - name: Check for SUPABASE_SERVICE_ROLE_KEY references
         run: |
-          if grep -r "SUPABASE_SERVICE_ROLE_KEY" \
-            apps/mobile/src \
-            apps/admin/src \
-            packages/api/src \
-            --include="*.ts" \
-            --include="*.tsx" \
-            --include="*.js" \
-            --include="*.jsx"; then
-            echo "✗ Service role key reference found in client code"
-            exit 1
-          else
-            echo "✓ No service-role key references in client code"
-          fi
+          set +e
+          git grep -n -I -F -e "SUPABASE_SERVICE_ROLE_KEY" -- apps packages
+          rc=$?
+          set -e
+          case "$rc" in
+            0) echo "✗ Service role key reference found in client code"; exit 1 ;;
+            1) echo "✓ No service-role key references in client code" ;;
+            *) echo "✗ git grep failed with exit code $rc"; exit 1 ;;
+          esac
