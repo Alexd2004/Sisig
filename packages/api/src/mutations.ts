@@ -56,13 +56,15 @@ export function useCreateOrder(
 
       return { orderId };
     },
-    onSuccess: () => {
+    ...options,
+    // Declared after the spread so a caller's onSuccess cannot replace the invalidation.
+    onSuccess: (data, variables, onMutateResult, context) => {
       // Invalidate orders query
       queryClient.invalidateQueries({
         queryKey: keys.orders.all(),
       });
+      return options?.onSuccess?.(data, variables, onMutateResult, context);
     },
-    ...options,
   });
 }
 
@@ -86,13 +88,15 @@ export function useRedeemPoints(
       // Points must only change through an RPC, so fail loudly until it lands.
       throw new Error('redeem_loyalty_reward RPC is not implemented yet');
     },
-    onSuccess: () => {
+    ...options,
+    // Declared after the spread so a caller's onSuccess cannot replace the invalidation.
+    onSuccess: (data, variables, onMutateResult, context) => {
       // Invalidate loyalty queries
       queryClient.invalidateQueries({
         queryKey: keys.loyalty.all(),
       });
+      return options?.onSuccess?.(data, variables, onMutateResult, context);
     },
-    ...options,
   });
 }
 
