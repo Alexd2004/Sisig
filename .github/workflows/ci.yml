@@ -1,0 +1,195 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  # Lint, typecheck, and unit tests with Turborepo caching
+  lint-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for Turborepo
+
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test -- --coverage
+
+      - name: Check Expo dependencies
+        run: pnpm -F @sisig/mobile exec expo install --check
+
+  # Database migrations, RLS tests, and schema linting
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Supabase CLI
+        run: npm install -g supabase
+
+      - name: Start Supabase
+        run: supabase start -x realtime
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_PASSWORD: postgres
+
+      - name: Apply migrations
+        run: supabase db push --linked
+        env:
+          SUPABASE_DB_URL: postgresql://postgres:postgres@localhost:5432/postgres
+
+      - name: Run pgTAP tests
+        run: pnpm db:test
+        env:
+          SUPABASE_DB_URL: postgresql://postgres:postgres@localhost:5432/postgres
+
+      - name: Lint database schema
+        run: pnpm db:lint
+
+  # TypeScript types drift check
+  types-drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Supabase CLI
+        run: npm install -g supabase
+
+      - name: Start Supabase
+        run: supabase start -x realtime
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_PASSWORD: postgres
+
+      - name: Apply migrations
+        run: supabase db push --linked
+        env:
+          SUPABASE_DB_URL: postgresql://postgres:postgres@localhost:5432/postgres
+
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate types
+        run: pnpm db:types
+
+      - name: Check for uncommitted type changes
+        run: |
+          if git diff --quiet packages/api/src/database.types.ts; then
+            echo "✓ Generated types match committed types"
+          else
+            echo "✗ Generated types differ from committed types"
+            echo "Run 'pnpm db:types' and commit the changes"
+            git diff packages/api/src/database.types.ts
+            exit 1
+          fi
+
+  # Secret scanning
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: gitleaks scan
+        uses: gitleaks/gitleaks-action@v2
+
+      - name: Check for service-role key in bundle
+        run: |
+          if grep -r "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" \
+            apps/mobile/src \
+            apps/admin/src \
+            packages/api/src \
+            --include="*.ts" \
+            --include="*.tsx" \
+            --include="*.js" \
+            --include="*.jsx"; then
+            echo "✗ Service-role key or JWT pattern found in source code"
+            exit 1
+          else
+            echo "✓ No service-role keys detected in bundle"
+          fi
+
+      - name: Check for SUPABASE_SERVICE_ROLE_KEY references
+        run: |
+          if grep -r "SUPABASE_SERVICE_ROLE_KEY" \
+            apps/mobile/src \
+            apps/admin/src \
+            packages/api/src \
+            --include="*.ts" \
+            --include="*.tsx" \
+            --include="*.js" \
+            --include="*.jsx"; then
+            echo "✗ Service role key reference found in client code"
+            exit 1
+          else
+            echo "✓ No service-role key references in client code"
+          fi
