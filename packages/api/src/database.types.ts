@@ -190,22 +190,6 @@ isOneToOne: true
           CompositeTypes: {
             [_ in never]: never
           }
-        },"storage": {
-          Tables: {
-            [_ in never]: never
-          }
-          Views: {
-            [_ in never]: never
-          }
-          Functions: {
-            [_ in never]: never
-          }
-          Enums: {
-            [_ in never]: never
-          }
-          CompositeTypes: {
-            [_ in never]: never
-          }
         }
 }
 
@@ -318,10 +302,6 @@ export const Constants = {
   "public": {
           Enums: {
             "app_role": ["customer", "staff", "admin", "owner"],"order_status": ["pending", "confirmed", "preparing", "ready", "completed", "cancelled"],"user_role": ["customer", "staff", "admin"]
-          }
-        },"storage": {
-          Enums: {
-            
           }
         }
 } as const
