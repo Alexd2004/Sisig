@@ -127,7 +127,7 @@ All workspaces share ESLint and Prettier configs via `@sisig/config`.
 ```bash
 pnpm lint               # ESLint all packages
 pnpm format             # Auto-format with Prettier
-pnpm format:check       # Check formatting (CI-friendly)
+pnpm format:check       # Check formatting (not run in CI yet; see docs/DEVOPS-02-CI.md)
 ```
 
 A **deliberately bad import** will fail lint:
@@ -218,66 +218,70 @@ pnpm dev
 
 ## Continuous Integration (DEVOPS-02)
 
-Every PR runs automated checks to ensure code quality and database integrity.
+Every PR to `main` runs the checks defined in `.github/workflows/`. Job details and the manual GitHub settings are in [docs/DEVOPS-02-CI.md](docs/DEVOPS-02-CI.md).
 
 ### Running CI Checks Locally
 
-Before pushing, run all CI checks locally (they must pass before merge):
+Run these before pushing. The database steps need Docker.
 
 ```bash
-# Lint, typecheck, and unit tests (all affected by changes)
+# lint-and-test
+pnpm install --frozen-lockfile
 pnpm lint
 pnpm typecheck
 pnpm test
-
-# Check Expo dependencies
 pnpm -F @sisig/mobile exec expo install --check
 
-# Database: migrations, RLS tests, schema linting
-pnpm db:start        # Start local Supabase
-pnpm db:reset        # Apply migrations from scratch
-pnpm db:test         # Run pgTAP tests
-pnpm db:lint         # Check schema
-pnpm db:types        # Generate types and verify no drift
+# database (Docker required)
+pnpm db:start        # Start local Supabase; applies supabase/migrations
+pnpm db:reset        # Rebuild from scratch: all migrations, then the seed
+pnpm db:test         # pgTAP tests in supabase/tests/database
+pnpm db:lint         # Schema lint; exits non-zero on errors
 
-# Edge Functions: Deno tests
-deno test --allow-all supabase/functions
+# types-drift: regenerate types, then fail if they changed
+pnpm db:types
+git diff --exit-code packages/api/src/database.types.ts
+
+# deno-tests
+deno test --allow-all --no-config supabase/functions
+deno fmt --check --no-config supabase/functions
+deno lint --no-config supabase/functions
+
+# secrets (install gitleaks first: brew install gitleaks)
+gitleaks detect
+git grep -n -I -F -e "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" -e "SUPABASE_SERVICE_ROLE_KEY" -- apps packages
+# No output means clean (git grep exits 1 when nothing matches)
 ```
 
 ### Required Checks on Every PR
 
-**GitHub Actions runs:**
-1. ✅ **Lint** — ESLint across all workspaces
-2. ✅ **Type check** — TypeScript strict mode (zero errors)
-3. ✅ **Unit tests** — Jest with coverage
-4. ✅ **Expo health** — `expo install --check` for dependency issues
-5. ✅ **Database migrations** — Apply from scratch on local Supabase
-6. ✅ **RLS tests** — pgTAP tests verify Row-Level Security
-7. ✅ **Schema lint** — Check for missing PKs, RLS violations, naming issues
-8. ✅ **Types drift** — Generated types must match committed `database.types.ts`
-9. ✅ **Deno tests** — Edge Functions pass all tests
-10. ✅ **Secret scan** — gitleaks detects keys/tokens
-11. ✅ **Service-role check** — Grep for leaked JWT patterns in source
+| Check (job) | What it runs |
+|---|---|
+| `lint-and-test` | ESLint, `tsc --noEmit`, Jest, `expo install --check` |
+| `database` | Local Supabase start, pgTAP tests, `supabase db lint --schema public,private --fail-on error` |
+| `types-drift` | `pnpm db:types`; fails if `database.types.ts` changes |
+| `secrets` | gitleaks, service-role key grep over `apps/` and `packages/` |
+| `deno-tests` | Edge Function tests, `deno fmt --check`, `deno lint` |
 
-**Target duration:** < 10 minutes with Turborepo caching
+Every check runs on every PR. They block a merge only after branch protection on `main` requires them. That is a manual GitHub setting, described in [docs/DEVOPS-02-CI.md](docs/DEVOPS-02-CI.md#required-status-checks-manual-github-setting).
+
+**Target duration:** median under 10 minutes. Recent runs took about 3 minutes wall clock.
 
 ### Debugging CI Failures
 
 **Type drift failure:**
 ```bash
+pnpm db:start        # The type generator reads the local database
 pnpm db:types
 git add packages/api/src/database.types.ts
 git commit -m "chore: regenerate types after schema change"
 ```
 
 **Migration or RLS test failure:**
-Check the test output; fix the migration and re-push. Use `pnpm db:reset` to test locally.
+Check the test output; fix the migration and re-push. Use `pnpm db:reset && pnpm db:test` to reproduce locally.
 
-**Linting failure:**
-```bash
-pnpm format  # Auto-fix formatting
-pnpm lint    # Check for remaining errors
-```
+**Lint failure:**
+Fix the ESLint findings that `pnpm lint` reports. `pnpm format` applies Prettier formatting only.
 
 ## Further Reading
 
