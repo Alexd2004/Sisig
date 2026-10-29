@@ -56,7 +56,7 @@ jobs:
 
       - name: Start Supabase (auto-applies migrations)
         run: |
-          supabase start -x realtime,storage,functions
+          supabase start -x realtime
           echo "Supabase started successfully"
 
       - name: Wait for database to be ready
@@ -95,7 +95,7 @@ jobs:
 
       - name: Start Supabase (auto-applies migrations)
         run: |
-          supabase start -x realtime,storage,functions
+          supabase start -x realtime
           echo "Supabase started successfully"
 
       - name: Wait for database to be ready
@@ -141,6 +141,8 @@ jobs:
 
       - name: gitleaks scan
         uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check for service-role key in bundle
         run: |
