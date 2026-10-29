@@ -1,40 +1,70 @@
-import { useEffect, useState } from 'react';
-import { Stack } from 'expo-router';
+import { useEffect, useRef } from 'react';
+import { Stack, router, useGlobalSearchParams, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { SessionProvider, useSession, type SessionStatus } from '../src/session/session';
+import { resolveAuthRedirect } from '../src/navigation/auth-gate';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout(): JSX.Element {
-  const [isSessionRestored, setIsSessionRestored] = useState(false);
+  return (
+    <SessionProvider>
+      <RootNavigator />
+    </SessionProvider>
+  );
+}
+
+function RootNavigator(): JSX.Element | null {
+  const { status } = useSession();
+  const segments = useSegments();
+  const params = useGlobalSearchParams();
+  const previousStatus = useRef<SessionStatus>(status);
+
+  // The navigator mounts only once the session is known, so no stack flashes on cold start.
+  useEffect(() => {
+    if (status === 'loading') {
+      return;
+    }
+    SplashScreen.hideAsync().catch((error: unknown) => {
+      console.error('Failed to hide splash screen:', error);
+    });
+  }, [status]);
+
+  // Signing out clears every stack and shows the auth stack.
+  useEffect(() => {
+    const wasSignedIn = previousStatus.current === 'signed-in';
+    previousStatus.current = status;
+
+    if (wasSignedIn && status === 'signed-out') {
+      router.dismissAll();
+      router.replace('/welcome');
+    }
+  }, [status]);
+
+  const redirectTo = resolveAuthRedirect({ status, segments, returnTo: params.returnTo });
 
   useEffect(() => {
-    // Simulate session restoration
-    // In production, check Supabase auth state and restore session
-    const restoreSession = async (): Promise<void> => {
-      try {
-        // TODO: Restore session from SecureStore / Supabase
-        // const session = await supabase.auth.getSession();
-        // setSession(session?.session ?? null);
-      } catch (error) {
-        console.error('Failed to restore session:', error);
-      } finally {
-        setIsSessionRestored(true);
-        await SplashScreen.hideAsync();
-      }
-    };
+    if (redirectTo !== null) {
+      router.replace(redirectTo);
+    }
+  }, [redirectTo]);
 
-    restoreSession();
-  }, []);
-
-  if (!isSessionRestored) {
-    return <Stack screenOptions={{ headerShown: false }} />;
+  if (status === 'loading') {
+    return null;
   }
 
-  // TODO: Gate between auth stack and tabs based on session state
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="(auth)" options={{ animation: 'none' }} />
+      <Stack.Screen
+        name="redeem-confirm"
+        options={{ presentation: 'modal', headerShown: true, title: 'Redeem' }}
+      />
+      <Stack.Screen
+        name="item/[id]"
+        options={{ presentation: 'modal', headerShown: true, title: 'Item' }}
+      />
     </Stack>
   );
 }

@@ -1,21 +1,16 @@
-import { render, fireEvent } from '@testing-library/react-native';
-import HomeScreen from './index';
+import { render } from '@testing-library/react-native';
+import IndexRedirect from './index';
 
-jest.mock('@sisig/api', () => ({
-  apiUrl: () => 'http://localhost:3000',
+const mockRedirect = jest.fn((_props: { href: string }) => null);
+
+jest.mock('expo-router', () => ({
+  Redirect: (props: { href: string }) => mockRedirect(props),
 }));
 
-describe('HomeScreen', () => {
-  it('renders welcome message', () => {
-    const { getByText } = render(<HomeScreen />);
-    expect(getByText('Welcome to Sisig')).toBeTruthy();
-    expect(getByText('Mobile App')).toBeTruthy();
-  });
-
-  it('increments count when button is pressed', () => {
-    const { getByText } = render(<HomeScreen />);
-    const incrementButton = getByText('Increment');
-    fireEvent.press(incrementButton);
-    expect(getByText('Count: 1')).toBeTruthy();
+describe('IndexRedirect', () => {
+  it('sends cold start to the Home tab', () => {
+    render(<IndexRedirect />);
+    expect(mockRedirect).toHaveBeenCalled();
+    expect(mockRedirect.mock.calls[0][0]).toEqual(expect.objectContaining({ href: '/home' }));
   });
 });
