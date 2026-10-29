@@ -1,4 +1,4 @@
-import { useQuery, UseQueryOptions } from '@tanstack/react-query';
+import { queryOptions, QueryKey, useQuery, UseQueryOptions } from '@tanstack/react-query';
 import { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../database.types';
 import { keys } from '../query-keys';
@@ -6,8 +6,7 @@ import { normalizeError } from '../client';
 
 type Product = Database['public']['Tables']['products']['Row'];
 
-interface UseMenuOptions
-  extends Omit<UseQueryOptions, 'queryKey' | 'queryFn'> {
+interface UseMenuOptions extends Omit<UseQueryOptions, 'queryKey' | 'queryFn'> {
   category?: string;
 }
 
@@ -15,10 +14,7 @@ interface UseMenuOptions
  * Fetch menu items with optional filtering.
  * Persisted query (safe for offline).
  */
-export function useMenu(
-  client: SupabaseClient<Database>,
-  options?: UseMenuOptions,
-) {
+export function useMenu(client: SupabaseClient<Database>, options?: UseMenuOptions) {
   const { category, ...queryOptions } = options || {};
 
   return useQuery({
@@ -44,15 +40,16 @@ export function useMenu(
 }
 
 /**
- * Fetch menu categories.
- * Persisted query (safe for offline).
+ * Query options for the distinct category list of available products.
+ * Separate from the hook so tests and prefetching can use the same definition.
+ * Persisted query (menu prefix, safe for offline).
  */
-export function useMenuCategories(
-  client: SupabaseClient<Database>,
-  options?: Omit<UseQueryOptions, 'queryKey' | 'queryFn'>,
-) {
-  return useQuery({
-    queryKey: keys.menu.categories(),
+export function menuCategoriesQueryOptions(client: SupabaseClient<Database>) {
+  // Widened to QueryKey so the options can be merged with UseQueryOptions in the hook.
+  const queryKey: QueryKey = keys.menu.categories();
+
+  return queryOptions({
+    queryKey,
     queryFn: async (): Promise<string[]> => {
       const { data, error } = await client
         .from('products')
@@ -63,13 +60,24 @@ export function useMenuCategories(
         throw normalizeError(error);
       }
 
-      const categories = Array.from(
-        new Set(data?.map((p) => p.category) || []),
-      ).sort();
+      const categories = Array.from(new Set(data?.map((p) => p.category) || [])).sort();
 
       return categories;
     },
     staleTime: 1000 * 60 * 10, // 10 minutes
+  });
+}
+
+/**
+ * Fetch menu categories.
+ * Persisted query (safe for offline).
+ */
+export function useMenuCategories(
+  client: SupabaseClient<Database>,
+  options?: Omit<UseQueryOptions<string[]>, 'queryKey' | 'queryFn'>
+) {
+  return useQuery({
+    ...menuCategoriesQueryOptions(client),
     ...options,
   });
 }
@@ -80,16 +88,12 @@ export function useMenuCategories(
 export function useProduct(
   client: SupabaseClient<Database>,
   id: string,
-  options?: Omit<UseQueryOptions, 'queryKey' | 'queryFn'>,
+  options?: Omit<UseQueryOptions, 'queryKey' | 'queryFn'>
 ) {
   return useQuery({
     queryKey: keys.menu.item(id),
     queryFn: async (): Promise<Product | null> => {
-      const { data, error } = await client
-        .from('products')
-        .select()
-        .eq('id', id)
-        .single();
+      const { data, error } = await client.from('products').select().eq('id', id).single();
 
       if (error) {
         throw normalizeError(error);

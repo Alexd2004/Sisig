@@ -27,9 +27,9 @@ const createStyles = (c: AppColors) =>
       marginBottom: 8,
     },
     pointsSubtext: {
+      // No opacity: a faded foreground drops below WCAG AA on the primary fill.
       color: c.primaryForeground,
       fontSize: 12,
-      opacity: 0.8,
     },
     section: {
       paddingHorizontal: 16,
