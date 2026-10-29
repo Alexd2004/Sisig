@@ -22,7 +22,7 @@ jobs:
 
       - uses: denoland/setup-deno@v1
         with:
-          deno-version: vx.x.x
+          deno-version: vx  # Latest version
 
       - name: Run Deno tests
         run: deno test --allow-all supabase/functions
