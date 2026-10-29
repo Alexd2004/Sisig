@@ -25,7 +25,7 @@ export function useImageAnalysis(): UseImageAnalysisResult {
 
       reader.onload = async (): Promise<void> => {
         try {
-          const base64 = (reader.result as string).split(',')[1];
+          // const base64 = (reader.result as string).split(',')[1];
 
           // In production, send base64 to Claude API with vision capability
           // const client = new ClaudeClient();

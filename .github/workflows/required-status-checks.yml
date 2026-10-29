@@ -1,0 +1,25 @@
+name: Required Status Checks
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+      - Edge Functions
+    types:
+      - completed
+
+jobs:
+  # This is a placeholder to consolidate all required checks
+  # In practice, GitHub enforces required checks via branch protection rules
+  # See: Settings > Branches > Branch protection rules > Require status checks
+  check-status:
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Check CI workflow status
+        run: |
+          if [ "${{ github.event.workflow_run.conclusion }}" = "failure" ]; then
+            echo "CI workflow failed"
+            exit 1
+          fi

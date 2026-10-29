@@ -8,6 +8,7 @@ module.exports = {
     es2021: true,
   },
   rules: {
+    'import/no-unresolved': 'off', // workspace packages resolve to unbuilt dist/ in CI; tsc covers resolution
     'no-console': 'warn',
     'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
   },
@@ -17,7 +18,7 @@ module.exports = {
       parser: '@typescript-eslint/parser',
       extends: ['expo', 'plugin:@typescript-eslint/recommended'],
       rules: {
-        '@typescript-eslint/explicit-function-return-types': 'warn',
+        'import/no-unresolved': 'off',
         '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       },
     },

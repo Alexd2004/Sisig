@@ -1,6 +1,8 @@
-import React from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import type { ComponentProps } from 'react';
+
+type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 const MENU_ITEMS = [
   { icon: 'history', label: 'Order History', screen: 'order-history' },
@@ -15,7 +17,7 @@ const MENU_ITEMS = [
 function MenuItemCard({ icon, label, onPress }: { icon: string; label: string; onPress: () => void }): JSX.Element {
   return (
     <Pressable style={styles.menuItem} onPress={onPress}>
-      <MaterialCommunityIcons name={icon as any} size={24} color="#007AFF" />
+      <MaterialCommunityIcons name={icon as IconName} size={24} color="#007AFF" />
       <Text style={styles.menuLabel}>{label}</Text>
       <MaterialCommunityIcons name="chevron-right" size={24} color="#ccc" />
     </Pressable>

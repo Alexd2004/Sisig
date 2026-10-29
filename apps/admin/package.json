@@ -12,7 +12,7 @@
     "test": "echo 'Test placeholder'"
   },
   "devDependencies": {
-    "@sisig/config": "*",
+    "@sisig/config": "workspace:*",
     "typescript": "^5.3.0"
   }
 }

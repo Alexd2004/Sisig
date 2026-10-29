@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 
@@ -34,7 +34,7 @@ export default function RootLayout(): JSX.Element {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="(auth)" options={{ animationEnabled: false }} />
+      <Stack.Screen name="(auth)" options={{ animation: 'none' }} />
     </Stack>
   );
 }

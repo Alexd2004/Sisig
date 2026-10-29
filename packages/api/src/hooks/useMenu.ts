@@ -57,8 +57,7 @@ export function useMenuCategories(
       const { data, error } = await client
         .from('products')
         .select('category')
-        .eq('is_available', true)
-        .distinct();
+        .eq('is_available', true);
 
       if (error) {
         throw normalizeError(error);

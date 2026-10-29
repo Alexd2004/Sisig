@@ -216,12 +216,76 @@ Restart dev server:
 pnpm dev
 ```
 
+## Continuous Integration (DEVOPS-02)
+
+Every PR runs automated checks to ensure code quality and database integrity.
+
+### Running CI Checks Locally
+
+Before pushing, run all CI checks locally (they must pass before merge):
+
+```bash
+# Lint, typecheck, and unit tests (all affected by changes)
+pnpm lint
+pnpm typecheck
+pnpm test
+
+# Check Expo dependencies
+pnpm -F @sisig/mobile exec expo install --check
+
+# Database: migrations, RLS tests, schema linting
+pnpm db:start        # Start local Supabase
+pnpm db:reset        # Apply migrations from scratch
+pnpm db:test         # Run pgTAP tests
+pnpm db:lint         # Check schema
+pnpm db:types        # Generate types and verify no drift
+
+# Edge Functions: Deno tests
+deno test --allow-all supabase/functions
+```
+
+### Required Checks on Every PR
+
+**GitHub Actions runs:**
+1. ✅ **Lint** — ESLint across all workspaces
+2. ✅ **Type check** — TypeScript strict mode (zero errors)
+3. ✅ **Unit tests** — Jest with coverage
+4. ✅ **Expo health** — `expo install --check` for dependency issues
+5. ✅ **Database migrations** — Apply from scratch on local Supabase
+6. ✅ **RLS tests** — pgTAP tests verify Row-Level Security
+7. ✅ **Schema lint** — Check for missing PKs, RLS violations, naming issues
+8. ✅ **Types drift** — Generated types must match committed `database.types.ts`
+9. ✅ **Deno tests** — Edge Functions pass all tests
+10. ✅ **Secret scan** — gitleaks detects keys/tokens
+11. ✅ **Service-role check** — Grep for leaked JWT patterns in source
+
+**Target duration:** < 10 minutes with Turborepo caching
+
+### Debugging CI Failures
+
+**Type drift failure:**
+```bash
+pnpm db:types
+git add packages/api/src/database.types.ts
+git commit -m "chore: regenerate types after schema change"
+```
+
+**Migration or RLS test failure:**
+Check the test output; fix the migration and re-push. Use `pnpm db:reset` to test locally.
+
+**Linting failure:**
+```bash
+pnpm format  # Auto-fix formatting
+pnpm lint    # Check for remaining errors
+```
+
 ## Further Reading
 
 - [Expo Router Documentation](https://expo.dev/routing)
 - [Turborepo Task Caching](https://turbo.build/repo/docs/core-concepts/caching)
 - [pnpm Workspaces](https://pnpm.io/workspaces)
 - [React Native Testing Library](https://testing-library.com/docs/react-native-testing-library/intro)
+- [GitHub Actions Workflows](.github/workflows) — CI/CD pipeline definitions
 
 
 ---

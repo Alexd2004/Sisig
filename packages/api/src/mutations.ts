@@ -6,7 +6,7 @@ import {
 import { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from './database.types';
 import { keys } from './query-keys';
-import { normalizeError, AppError } from './client';
+import { normalizeError } from './client';
 
 type Order = Database['public']['Tables']['orders']['Insert'];
 type OrderItem = Database['public']['Tables']['order_items']['Insert'];
@@ -17,7 +17,10 @@ type OrderItem = Database['public']['Tables']['order_items']['Insert'];
 export function useCreateOrder(
   client: SupabaseClient<Database>,
   queryClient: QueryClient,
-  options?: Omit<UseMutationOptions, 'mutationFn'>,
+  options?: Omit<
+    UseMutationOptions<{ orderId: string }, Error, { order: Order; items: OrderItem[] }>,
+    'mutationFn'
+  >,
 ) {
   return useMutation({
     mutationFn: async (payload: {
@@ -67,24 +70,21 @@ export function useCreateOrder(
  * Redeem loyalty points.
  */
 export function useRedeemPoints(
-  client: SupabaseClient<Database>,
+  _client: SupabaseClient<Database>,
   queryClient: QueryClient,
-  options?: Omit<UseMutationOptions, 'mutationFn'>,
+  options?: Omit<
+    UseMutationOptions<void, Error, { rewardId: string; points: number }>,
+    'mutationFn'
+  >,
 ) {
   return useMutation({
-    mutationFn: async (payload: {
+    mutationFn: async (_payload: {
       rewardId: string;
       points: number;
     }): Promise<void> => {
-      // Call RPC to redeem
-      const { error } = await client.rpc('redeem_loyalty_reward', {
-        p_reward_id: payload.rewardId,
-        p_points: payload.points,
-      });
-
-      if (error) {
-        throw normalizeError(error);
-      }
+      // TODO(LOY): no redeem_loyalty_reward RPC exists in supabase/migrations yet.
+      // Points must only change through an RPC, so fail loudly until it lands.
+      throw new Error('redeem_loyalty_reward RPC is not implemented yet');
     },
     onSuccess: () => {
       // Invalidate loyalty queries

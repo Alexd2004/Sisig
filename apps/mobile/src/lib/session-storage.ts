@@ -70,9 +70,9 @@ async function encryptSession(session: string, key: string): Promise<{
  * Decrypt session JSON with AES-256-GCM.
  */
 async function decryptSession(
-  encrypted: string,
-  key: string,
-  iv: string,
+  _encrypted: string,
+  _key: string,
+  _iv: string,
 ): Promise<string | null> {
   try {
     // In production, use proper AES decryption
