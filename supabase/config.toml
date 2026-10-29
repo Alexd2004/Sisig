@@ -32,6 +32,11 @@ enable_signup = true
 double_confirm_changes = true
 enable_confirmations = true
 
+# Adds the app_role claim to access tokens (see migrations 20261028000005 and 20261028000006).
+[auth.hook.custom_access_token]
+enabled = true
+uri = "pg-functions://postgres/private/custom_access_token_hook"
+
 [analytics]
 enabled = true
 

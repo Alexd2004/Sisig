@@ -1,16 +1,15 @@
 name: Edge Functions
 
 on:
+  # No path filter on purpose: deno-tests is a required check. A path-filtered
+  # workflow never reports a status on PRs that skip its paths, which leaves
+  # the required check pending forever.
   pull_request:
     branches:
       - main
-    paths:
-      - 'supabase/functions/**'
   push:
     branches:
       - main
-    paths:
-      - 'supabase/functions/**'
 
 jobs:
   deno-tests:

@@ -1,384 +1,179 @@
-# Supabase Database Setup (DATA-01)
+# Supabase database (DATA-01)
 
-PostgreSQL database with versioned migrations, Row-Level Security, and Edge Functions.
+PostgreSQL with versioned migrations, row-level security, generated TypeScript
+types and Edge Functions. Rules for migrations, schemas, policies and Edge
+Functions are in [CONVENTIONS.md](./CONVENTIONS.md).
 
-## Quick Start
+## Prerequisites
+
+- Docker running. The local Supabase stack runs in containers.
+- Node 18+ and pnpm 9. The Supabase CLI is a root devDependency, so the `db:*`
+  scripts use it after `pnpm install`.
+- Deno 2 for the Edge Function tests (CI uses Deno 2.x).
+
+## Clean clone: create the local database
 
 ```bash
-# Start local Supabase (Docker required)
-pnpm db:start
-
-# Reset database with all migrations and seed
-pnpm db:reset
-
-# Generate TypeScript types
-pnpm db:types
-
-# Run database tests
-pnpm db:test
-
-# Stop Supabase
-pnpm db:stop
+pnpm install
+pnpm db:start   # starts the local stack; the first run pulls Docker images
+pnpm db:reset   # rebuilds the database: every migration, then supabase/seed.sql
 ```
 
-## Architecture
+`pnpm db:reset` does not start the stack, so run `pnpm db:start` first.
 
-### Schemas
+**Timing target:** `pnpm db:reset` under 3 minutes with images already pulled.
+This has not been measured yet. To measure it, run `time pnpm db:reset`.
 
-- **`public`** — API-exposed tables (accessible via PostgREST)
-- **`private`** — Internal tables/functions (NOT exposed; used for scheduled jobs, internal state)
-- **`storage`** — File uploads (managed by Supabase)
+## Commands
 
-### Tables
+| Command | What it does |
+| --- | --- |
+| `pnpm db:start` | Start the local stack (`supabase start`) |
+| `pnpm db:stop` | Stop the local stack |
+| `pnpm db:reset` | Rebuild the local database from migrations and seed (`supabase db reset`) |
+| `pnpm db:types` | Regenerate `packages/api/src/database.types.ts` from the local `public` schema |
+| `pnpm db:test` | Run the pgTAP tests (`supabase test db`); exits non-zero on failure |
+| `pnpm db:lint` | Lint the schema (`supabase db lint`) |
+| `pnpm db:new <name>` | Create a new migration file |
 
-**Auth & Users:**
-- `auth.users` — Supabase managed auth table
-- `public.users` — User profiles with roles (customer, staff, admin)
+## Layout
 
-**Products & Ordering:**
-- `public.products` — Menu items
-- `public.orders` — Customer orders
-- `public.order_items` — Line items per order
+```
+supabase/
+├── config.toml       Local stack settings (exposed API schemas, auth, realtime)
+├── migrations/       Forward-only SQL migrations, applied in timestamp order
+├── seed.sql          Local seed data, applied by db:reset
+├── tests/database/   pgTAP tests
+└── functions/        Edge Functions; _shared/ holds common helpers
+```
 
-**Loyalty:**
-- `public.loyalty_points` — Points balance per user
-- `public.loyalty_transactions` — Points transaction log
+Extensions (`uuid-ossp`, `pg_cron`, `pgtap`, `pgcrypto`, `pg_net`) are enabled in
+`migrations/20261028000000_init_schemas.sql`, not in `config.toml`. Auth redirect
+URLs are not templated in `config.toml` yet; AUTH-01 owns that.
 
-**Internal:**
-- `private.job_runs` — Scheduled job execution logs (pg_cron)
+## Schema (from the migrations on main)
+
+- **`public`**: `profiles`, `user_roles` (roles `customer`, `staff`, `admin`,
+  `owner`), `products`, `orders`, `order_items`, `loyalty_points`,
+  `loyalty_transactions`, and the legacy `users` table (see Known issues).
+- **`private`**: `job_runs` (scheduled job log) and the function
+  `custom_access_token_hook`.
+- **Enums**: `app_role`, `user_role`, `order_status`.
 
 ## Migrations
 
-### Creating Migrations
+- Create one with `pnpm db:new <snake_case_name>`. Never edit one that has been
+  applied to a shared environment. Rules are in CONVENTIONS.md.
+- Rebuild the local database with `pnpm db:reset`. It applies every migration,
+  then `seed.sql`.
+- Check history with `pnpm exec supabase migration list` (the stack must be
+  running).
+
+### Timestamp clashes
+
+Two branches created migrations with the same or interleaved timestamps. Rebase
+onto `origin/main`, rename your migration to a timestamp after the latest one on
+main, then run `pnpm db:reset` and `pnpm db:types`.
+
+### NOT NULL column with seed rows
+
+Seeding fails if a NOT NULL column is added without a default. Add the column
+with a default, fill the existing rows, and drop the default in the same
+migration:
+
+```sql
+alter table public.products add column sku text not null default 'UNKNOWN';
+-- Fill real values for the existing rows here, for example:
+-- update public.products set sku = '<value>' where sku = 'UNKNOWN';
+alter table public.products alter column sku drop default;
+```
+
+## Database types
 
 ```bash
-pnpm db:new <name>
+pnpm db:types   # writes packages/api/src/database.types.ts (needs the stack running)
 ```
 
-Generates `migrations/TIMESTAMP_<name>.sql` with a unique timestamp.
+CI's `types-drift` job regenerates the file and fails if it differs from the
+committed copy. Commit the regenerated file in the same PR as the schema change.
 
-### Naming Conventions
-
-- One concern per migration
-- Forward-only: never edit an applied migration
-- Timestamp auto-generated by `pnpm db:new`
-- Example: `20261028000001_init_users.sql`
-
-### Edge Cases
-
-**Clashing timestamps:** If two developers create migrations simultaneously:
-```bash
-# Rebase and regenerate timestamps
-git rebase origin/main
-pnpm db:reset
-```
-
-**NOT NULL column in existing table:** Seed may break:
-```sql
--- ✅ Good: Add with default value
-alter table products add column sku text not null default 'UNKNOWN';
-
--- Then remove default after adding values to existing rows
-alter table products alter column sku drop default;
-
--- ❌ Avoid: Direct NOT NULL without default
-alter table products add column sku text not null;
-```
-
-## Row-Level Security (RLS)
-
-### Strategy
-
-- Tables default to `enable row level security`
-- Policies define what each role can see/do
-- No policy = no access (deny by default)
-
-### Example Policy
-
-```sql
-create policy "Users can view their own profile"
-  on public.users
-  for select
-  using (auth.uid() = id);
-```
-
-### Admin Access
-
-Staff and admins bypass most user-scoped policies via role checks:
-
-```sql
-create policy "Staff can view all orders"
-  on public.orders
-  for select
-  using (
-    exists (
-      select 1 from public.users
-      where id = auth.uid() and role in ('staff', 'admin')
-    )
-  );
-```
-
-## SECURITY DEFINER Functions
-
-All functions with elevated privileges must set `search_path = ''`:
-
-```sql
--- ✅ Good: Explicit search_path
-create or replace function public.handle_new_user()
-returns trigger as $$
-begin
-  insert into public.users (id, email)
-  values (new.id, new.email);
-  return new;
-end;
-$$ language plpgsql security definer set search_path = '';
-
--- ❌ Avoid: Implicit search_path
-create or replace function public.dangerous_function()
-returns void as $$
-begin
-  -- Attacker can hijack function resolution
-end;
-$$ language plpgsql security definer;
-```
-
-## Scheduled Jobs (pg_cron)
-
-All jobs log to `private.job_runs`:
-
-```sql
--- Create job
-select cron.schedule(
-  'job_name',
-  '0 8 * * *', -- every day at 8 AM
-  'select log_job_start(''job_name'');'
-);
-
--- Log function
-create or replace function private.log_job_start(job_name text)
-returns void as $$
-begin
-  insert into private.job_runs (job_name, status)
-  values (job_name, 'running');
-end;
-$$ language plpgsql security definer set search_path = '';
-```
-
-## Edge Functions
-
-Store in `supabase/functions/<name>/`:
-
-```
-supabase/functions/
-├── _shared/
-│   ├── auth.ts        # JWT verification
-│   ├── errors.ts      # Error envelope
-│   └── cors.ts        # CORS headers
-├── auth-webhook/
-│   └── index.ts       # Webhook handler
-└── jwt-verify/
-    └── index.ts       # Token verification
-```
-
-### Template
+Import the types from the API package:
 
 ```typescript
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { verifyJWT } from '../_shared/auth.ts';
-import { errorEnvelope } from '../_shared/errors.ts';
-import { corsHeaders } from '../_shared/cors.ts';
+import type { Database } from "@sisig/api";
 
-serve(async (req) => {
-  // CORS
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
-
-  try {
-    // Verify JWT
-    const token = req.headers.get('authorization')?.split('Bearer ')[1];
-    if (!token) throw new Error('Unauthorized');
-    
-    const user = await verifyJWT(token);
-
-    return new Response(
-      JSON.stringify({ user }),
-      { headers: corsHeaders }
-    );
-  } catch (error) {
-    return errorEnvelope(error);
-  }
-});
-```
-
-### Deno Tests
-
-```typescript
-import { assertEquals } from 'https://deno.land/std@0.208.0/assert/mod.ts';
-import { handler } from './index.ts';
-
-Deno.test('GET returns 200', async () => {
-  const req = new Request('http://localhost/');
-  const res = await handler(req);
-  assertEquals(res.status, 200);
-});
-```
-
-Run via: `supabase functions serve`
-
-## Database Types
-
-### Generate Types
-
-```bash
-pnpm db:types
-```
-
-Outputs to `packages/api/src/database.types.ts` (auto-generated, do not edit).
-
-### Import in Code
-
-```typescript
-import type { Database } from '@sisig/api';
-
-type User = Database['public']['Tables']['users']['Row'];
-type Order = Database['public']['Tables']['orders']['Insert'];
-
-async function getUser(id: string) {
-  const { data } = await supabase
-    .from('users')
-    .select()
-    .eq('id', id)
-    .single();
-
-  const user: User = data;
-  return user;
-}
+type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 ```
 
 ## Testing
 
-### pgTAP Tests
-
-Write SQL tests in `tests/database/`:
-
-```sql
-begin;
-select plan(3);
-
-select has_table('public', 'users', 'users table exists');
-select has_column('public', 'users', 'email', 'email column exists');
-select col_is_pk('public', 'users', 'id', 'id is primary key');
-
-select * from finish();
-rollback;
+```bash
+pnpm db:test                                          # pgTAP suites in tests/database
+pnpm db:lint                                          # schema lint
+deno test --allow-all --no-config supabase/functions  # Edge Function tests
+deno fmt --check --no-config supabase/functions
+deno lint --no-config supabase/functions
 ```
 
-Run all tests:
+`pnpm db:test` is the same command CI's `database` job runs after
+`supabase start`, which applies the migrations from scratch.
+
+## Edge Functions
+
+Each function is a folder with two files:
+
+- `index.ts` calls `Deno.serve(...)` and nothing else.
+- `handler.ts` exports `handler(req, deps)`, which holds the logic.
+
+Shared code is in `_shared/`: `cors.ts` (CORS and JSON responses), `errors.ts`
+(`AppError` and the error envelope) and `auth.ts` (bearer token, verification
+with Supabase Auth, role check).
+
+The sample function is `whoami`. `GET` returns the caller's `id`, `email` and
+`appRole`. A missing or invalid token gets a 401 in the error envelope.
+
+Run it locally:
 
 ```bash
-pnpm db:test
+pnpm db:start
+pnpm exec supabase functions serve
+curl -H "Authorization: Bearer <access_token>" http://127.0.0.1:54321/functions/v1/whoami
 ```
 
-Handed to DEVOPS-02 for CI integration.
-
-## Linting
-
-```bash
-pnpm db:lint
-```
-
-Checks for:
-- Missing primary keys
-- Public tables without RLS
-- Naming style inconsistencies
-- Security issues
-
-## Common Tasks
-
-### Add a New Table
-
-1. Create migration: `pnpm db:new add_table_name`
-2. Write SQL for table + indexes + RLS + comments
-3. Reset local DB: `pnpm db:reset`
-4. Generate types: `pnpm db:types`
-5. Commit migration and types
-
-### Grant Access to Role
-
-```sql
--- Grant specific tables
-grant select, insert, update on public.orders to authenticated;
-
--- Grant schema
-grant usage on schema public to authenticated;
-```
-
-### View Migration History
-
-```bash
-supabase migration list
-```
-
-### Inspect Local Database
-
-```bash
-# Connect via psql
-supabase db url
-psql $(supabase db url)
-
--- Or use Supabase Studio
-supabase start --browser
-```
-
-## Environment Variables
-
-`.env.local` (create, do not commit):
-
-```bash
-SUPABASE_URL=http://localhost:54321
-SUPABASE_ANON_KEY=<from supabase start output>
-SUPABASE_SERVICE_ROLE_KEY=<from supabase start output>
-```
+`authConfigFromEnv()` reads `SUPABASE_URL` and `SUPABASE_ANON_KEY`, which Supabase
+sets for functions. Never put the service-role key in a function that a client
+can reach, and never in the mobile or admin apps. CI greps for it.
 
 ## Troubleshooting
 
-### Docker not running
+- **Docker is not running.** Start Docker Desktop, then run `pnpm db:start`.
+- **`db:reset` says the stack is not running.** Run `pnpm db:start` first.
+- **Types look stale.** Run `pnpm db:types` and review
+  `git diff packages/api/src/database.types.ts`.
+- **A function returns 500 "Server misconfigured".** `SUPABASE_URL` or
+  `SUPABASE_ANON_KEY` is missing from the function's environment.
 
-```bash
-# Start Docker Desktop or daemon
-# Then retry:
-pnpm db:start
-```
+## Known issues (open)
 
-### Seed fails on NOT NULL column
-
-Use a default value temporarily, then remove it (see Edge Cases above).
-
-### Types not updating
-
-```bash
-# Regenerate types
-pnpm db:types
-
-# Verify output
-cat packages/api/src/database.types.ts | head -50
-```
-
-### JWT token verification failing
-
-Ensure `SUPABASE_SERVICE_ROLE_KEY` is set in Edge Function environment.
-
-## Next Steps
-
-- **AUTH-01:** Set up OAuth (GitHub, Google) and password reset flow
-- **PLAT-03:** Session state management in mobile app
-- **DEVOPS-02:** CI pipeline for database tests and type drift checks
+1. **RLS recursion.** The staff policies on `products` and `orders` read
+  `public.users`, and `profiles` reads `public.user_roles`. Those tables' own
+  staff policies read themselves. Any authenticated read of `products`, `orders`,
+  `profiles`, `user_roles` or `users` fails with "infinite recursion detected in
+  policy". Checked on Postgres 14 with stub auth objects. The fix is a forward
+  migration that uses the `is_staff()` and `is_admin()` helpers.
+2. **`db:reset` does not start the stack.** See Clean clone above.
+3. **Two role stores.** `20261028000004` replaced `handle_new_user`, so new
+   accounts no longer get a `public.users` row. Policies that read
+   `public.users.role` never see roles granted in `user_roles`. Owned by DATA-02.
+4. **Access-token hook is not wired up.** `config.toml` does not register
+   `custom_access_token_hook`, and no migration grants `supabase_auth_admin` access
+   to it. Owned by DATA-02.
+5. **Timing not measured.** The 3-minute `db:reset` target has not been checked.
 
 ## Resources
 
-- [Supabase Docs](https://supabase.com/docs)
-- [PostgreSQL Docs](https://www.postgresql.org/docs/)
-- [Row-Level Security](https://supabase.com/docs/guides/auth/row-level-security)
-- [pgTAP Testing](https://pgtap.org/)
-- [pg_cron Scheduling](https://github.com/citusdata/pg_cron)
+- [Supabase CLI reference](https://supabase.com/docs/reference/cli)
+- [Row-Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security)
+- [pgTAP](https://pgtap.org/)
+- [pg_cron](https://github.com/citusdata/pg_cron)
+- [Deno std](https://deno.land/std)

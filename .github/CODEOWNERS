@@ -1,18 +1,30 @@
-# Global owners
+# Review routing by area (see CONTRIBUTING.md > Branch Protection).
+#
+# Team mapping from ticket DEVOPS-03:
+#   DEV-A: apps/mobile, packages/ui
+#   DEV-B: supabase/
+#   DEV-C: apps/admin, .github
+#
+# The DEV-A/DEV-B/DEV-C GitHub team handles do not exist yet, so every entry
+# still points at the existing repository owner. When the teams are created,
+# replace the owner on each DEV-x block with the team handle.
+# Any developer may approve a PR; CODEOWNERS only routes review requests.
+
+# Global owners (fallback for any path not listed below)
 * @Alexd2004
 
-# Mobile app and UI components
+# DEV-A: mobile app and UI components
 apps/mobile/** @Alexd2004
 packages/ui/** @Alexd2004
 
-# Admin panel and GitHub workflows
+# DEV-C: admin panel and GitHub workflows
 apps/admin/** @Alexd2004
 .github/** @Alexd2004
 
-# Supabase configuration
+# DEV-B: Supabase configuration
 supabase/** @Alexd2004
 
-# Root and config
+# Root and shared config
 package.json @Alexd2004
 turbo.json @Alexd2004
 packages/config/** @Alexd2004

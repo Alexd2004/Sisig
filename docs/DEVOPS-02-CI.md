@@ -1,167 +1,108 @@
 # DEVOPS-02: GitHub Actions CI Pipeline
 
-**Plan ID:** DEVOPS-02 | **Epic:** DEVOPS | **Owner:** DEV-C | **Status:** Complete
+**Plan ID:** DEVOPS-02 | **Epic:** DEVOPS | **Owner:** DEV-C | **Status:** Code complete. Required checks are not yet enforced on `main` (manual step below).
 
 ## Overview
 
-Every pull request runs automated checks to enforce code quality, database integrity, and security. All checks must pass before merging to `main`.
+Every pull request to `main` runs automated checks for code quality, database integrity, and secrets. A check blocks a merge only after branch protection on `main` requires it (see [Required status checks](#required-status-checks-manual-github-setting)).
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────┐
-│  Push to feature branch                 │
-└──────────────┬──────────────────────────┘
-               │
-               ▼
-┌─────────────────────────────────────────┐
-│  GitHub Actions CI Triggered            │
-├─────────────────────────────────────────┤
-│ ✓ Lint (ESLint, Prettier)               │
-│ ✓ TypeScript (strict mode)              │
-│ ✓ Jest unit tests                       │
-│ ✓ Expo dependencies                     │
-│ ✓ Supabase migrations                   │
-│ ✓ pgTAP RLS tests                       │
-│ ✓ Schema linting                        │
-│ ✓ Type drift check                      │
-│ ✓ Deno Edge Function tests              │
-│ ✓ gitleaks secret scan                  │
-│ ✓ Service-role key grep                 │
-└──────────────┬──────────────────────────┘
-               │
-      ┌────────┴────────┐
-      ▼                 ▼
-   ✅ PASS         ❌ FAIL
-      │                 │
-      ▼                 ▼
-  Merge allowed    PR blocked, fix & retry
+Pull request to main
+├── CI (.github/workflows/ci.yml)
+│   ├── lint-and-test   ESLint, tsc --noEmit, Jest, expo install --check
+│   ├── database        supabase start, pgTAP tests, supabase db lint
+│   ├── types-drift     pnpm db:types, fail if database.types.ts changes
+│   └── secrets         gitleaks, service-role key grep (apps/, packages/)
+└── Edge Functions (.github/workflows/edge-functions.yml)
+    └── deno-tests      deno test, deno fmt --check, deno lint
 ```
 
 ## Workflows
 
-### 1. CI Workflow (`.github/workflows/ci.yml`)
+### 1. CI (`.github/workflows/ci.yml`)
 
-**Triggers:** On every PR and push to `main`
+**Triggers:** `pull_request` and `push` to `main`. No path filter, so every PR runs every job.
 
-**Jobs:**
+#### Job 1: `lint-and-test`
+- **Measured duration:** about 1 minute (run 40951232765)
+- **Steps:** checkout; pnpm 9; Node 18 with the pnpm store cached; restore `.turbo/cache` with `actions/cache`; `pnpm install --frozen-lockfile`; `pnpm lint`; `pnpm typecheck`; `pnpm test`; `pnpm -F @sisig/mobile exec expo install --check`
 
-#### Job 1: Lint & Test
-- **Duration:** ~5 minutes (with Turborepo caching)
-- **Runs on:** ubuntu-latest
-- **Steps:**
-  1. Checkout code
-  2. Setup pnpm + Node 18
-  3. Install dependencies (cached)
-  4. Run `pnpm lint` — ESLint all workspaces
-  5. Run `pnpm typecheck` — TypeScript strict mode
-  6. Run `pnpm test` — Jest with coverage
-  7. Run `expo install --check` — Verify dependency integrity
+#### Job 2: `database`
+- **Measured duration:** about 3 minutes
+- **Steps:** checkout; install Supabase CLI 2.122.0; `supabase start -x realtime`, retried only on registry rate limits ("Data limit exceeded"); pnpm install; `pnpm db:test` (`supabase test db`, runs `supabase/tests/database/*.sql`); `pnpm db:lint` (`supabase db lint --local --schema public,private --fail-on error`; `extensions` is excluded because pgTAP's own functions there fail lint)
+- **Database:** the Supabase CLI starts its own Postgres container in Docker. The job does not use a separate PostgreSQL service. `supabase start` applies `supabase/migrations/`; the pgTAP tests check tables those migrations create. The seed file is not applied in CI.
 
-**Why separate from database:** Can run immediately without Supabase startup.
+#### Job 3: `types-drift`
+- **Measured duration:** about 2.5 minutes
+- **Steps:** same Supabase start; `pnpm db:types`; `git diff --quiet packages/api/src/database.types.ts`. On a difference it prints the diff and "Run 'pnpm db:types' and commit the changes", then fails.
 
-#### Job 2: Database
-- **Duration:** ~4 minutes
-- **Runs on:** ubuntu-latest with PostgreSQL service
-- **Steps:**
-  1. Checkout code
-  2. Install Supabase CLI
-  3. Start local Supabase stack
-  4. Apply all migrations from scratch
-  5. Run `pnpm db:test` — pgTAP RLS tests
-  6. Run `pnpm db:lint` — Schema validation
-
-**Why separate:** Long startup time; runs in parallel with lint/test job.
-
-**Migrations from scratch:** Ensures migrations are forward-only and idempotent.
-
-#### Job 3: Types Drift
-- **Duration:** ~4 minutes
-- **Runs on:** ubuntu-latest with PostgreSQL service
-- **Steps:**
-  1. Checkout code
-  2. Start local Supabase
-  3. Apply migrations
-  4. Setup pnpm + Node
-  5. Install dependencies
-  6. Run `pnpm db:types` — Generate types
-  7. Check `git diff` on `packages/api/src/database.types.ts`
-  8. **Fail if drift detected** with readable error
-
-**Critical check:** Schema changes without type updates = merge blocked.
-
-#### Job 4: Secrets
-- **Duration:** ~1 minute
-- **Runs on:** ubuntu-latest
+#### Job 4: `secrets`
+- **Measured duration:** under 10 seconds
 - **Checks:**
-  1. gitleaks scan — Detects exposed keys, tokens, credentials
-  2. Service-role key grep — Prevents JWT patterns in source code
-  3. `SUPABASE_SERVICE_ROLE_KEY` references — Blocks if found in client code
+  1. gitleaks (`gitleaks/gitleaks-action@v2`, full history) with default rules. Fails on a detected key or token.
+  2. `git grep -F` for the HS256 JWT header `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9` in `apps/` and `packages/`.
+  3. `git grep -F` for `SUPABASE_SERVICE_ROLE_KEY` in `apps/` and `packages/`.
 
-**Why critical:** Leaked secrets are a security breach.
+  Checks 2 and 3 pass only when `git grep` exits 1 (no match). A match and any other error both fail. The JWT header in check 2 matches every HS256 JWT, including Supabase's legacy anon key, so Supabase keys must come from environment configuration, not from source.
 
-### 2. Edge Functions Workflow (`.github/workflows/edge-functions.yml`)
+### 2. Edge Functions (`.github/workflows/edge-functions.yml`)
 
-**Triggers:** On changes to `supabase/functions/**`
+**Triggers:** `pull_request` and `push` to `main`, with no path filter. A path-filtered workflow reports no status on PRs outside its paths, which leaves a required check pending.
 
-**Steps:**
-1. Setup Deno
-2. Run `deno test --allow-all supabase/functions`
-3. Format check (`deno fmt --check`)
-4. Lint (`deno lint`)
+**Steps:** `deno test --allow-all --no-config supabase/functions`; `deno fmt --check --no-config supabase/functions`; `deno lint --no-config supabase/functions`
 
-**Why separate:** Only runs when Edge Functions change; skipped otherwise.
+### Removed: `required-status-checks.yml`
 
-## Required Status Checks
+This placeholder read the conclusion of other workflow runs on `main`, and enforced nothing. Results of `workflow_run` runs do not attach to pull request checks, so it never blocked a merge. It was deleted in DEVOPS-02.
 
-On GitHub, branch protection is configured to require:
+## Required status checks (manual GitHub setting)
 
-1. ✅ `lint-and-test` job passes
-2. ✅ `database` job passes
-3. ✅ `types-drift` job passes
-4. ✅ `secrets` job passes
-5. ✅ `deno-tests` job passes (if Edge Functions changed)
+**Not configured yet.** As of 2026-10-29, `main` has no branch protection: `gh api repos/Alexd2004/Sisig/branches/main/protection` returns 404 "Branch not protected". A repository admin must set this in **Settings > Branches > Branch protection rule** for `main`:
 
-**No merge without all passing.**
+- Require status checks to pass before merging, and select `lint-and-test`, `database`, `types-drift`, `secrets` and `deno-tests`.
+- Require a pull request with at least one approval, and block force pushes. These belong to DEVOPS-03.
+
+The check names are the job IDs above. GitHub offers a check as selectable only after it has run at least once on the repository, which has happened for all five.
 
 ## Local Development
 
-### Before Pushing, Run CI Locally
+### Running CI checks locally
 
 ```bash
-# 1. Lint and typecheck (fast, ~30s)
+# 1. Lint, typecheck, unit tests
+pnpm install --frozen-lockfile
 pnpm lint
 pnpm typecheck
-
-# 2. Unit tests (fast, ~2m)
 pnpm test
-
-# 3. Expo check
 pnpm -F @sisig/mobile exec expo install --check
 
-# 4. Database tests (requires Supabase, ~5m)
+# 2. Database (Docker required; the first start pulls images)
 pnpm db:start
 pnpm db:reset
 pnpm db:test
 pnpm db:lint
 
-# 5. Type drift check
+# 3. Types drift (exit 1 means commit the regenerated file)
 pnpm db:types
-# If git status shows changes, commit them:
-git add packages/api/src/database.types.ts
-git commit -m "chore: regenerate types"
+git diff --exit-code packages/api/src/database.types.ts
 
-# 6. Edge Functions (if you modified them)
-deno test --allow-all supabase/functions
+# 4. Edge Functions
+deno test --allow-all --no-config supabase/functions
+deno fmt --check --no-config supabase/functions
+deno lint --no-config supabase/functions
 
-# 7. Secret scan (optional, slow)
-npm install -g gitleaks
+# 5. Secrets (install gitleaks first: brew install gitleaks)
 gitleaks detect
+git grep -n -I -F -e "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" -e "SUPABASE_SERVICE_ROLE_KEY" -- apps packages
 ```
 
-### Common Failures & Fixes
+`git grep` searches tracked files only, so stage or commit new files before running the last command. No output from it means clean.
 
-**❌ Type drift detected**
+## Common Failures & Fixes
+
+**Type drift detected**
 ```bash
 pnpm db:start
 pnpm db:types
@@ -170,123 +111,84 @@ git add packages/api/src/database.types.ts
 git commit -m "chore: regenerate types after schema change"
 ```
 
-**❌ Migration breaks pgTAP test**
-```bash
-# Check the test output; fix migration
-pnpm db:reset
-pnpm db:test
-# Review error, update migration, commit, push
-```
+**Migration or pgTAP test fails**
+Read the test output. Fix the migration by adding a new one (never edit an applied migration), then run `pnpm db:reset && pnpm db:test`.
 
-**❌ Linting error**
-```bash
-pnpm format  # Auto-fix formatting
-pnpm lint    # Re-check
-# Commit fixes
-```
+**Schema lint fails**
+`supabase db lint --schema public,private --fail-on error` reported an error. Fix the reported object, then run `pnpm db:reset && pnpm db:lint`. Check that the error is in our schemas, not pgTAP internals (the `extensions` schema is not linted).
 
-**❌ Secret detected**
-Remove the secret from code:
-```bash
-# Edit file to remove leaked key
-git add .
-git commit -m "chore: remove leaked secret"
-```
+**Lint error**
+Fix the ESLint findings from `pnpm lint`. `pnpm format` applies Prettier formatting only.
 
-## Performance Optimization
+**Secret detected**
+A secret that reached a commit stays in git history. Rotate it first, then remove it from the code. Deleting it in a later commit is not enough.
 
-### Turborepo Caching
+**Service-role key or reference found**
+Move the value to a server-side Edge Function or to environment configuration. `SUPABASE_SERVICE_ROLE_KEY` must not appear in `apps/` or `packages/`.
 
-Only affected tasks run based on file changes:
+## Performance
 
-```bash
-# Changed package/api?
-# → Only package/api tasks run, skips others
+### Caching
 
-# Changed supabase migrations?
-# → Only database job runs, skips lint/test job
-```
+- **pnpm store:** `actions/setup-node` with `cache: pnpm`.
+- **Turborepo:** `lint-and-test` restores `.turbo/cache` (the local cache directory Turborepo uses by default) with `actions/cache`. Each run saves its own entry, and the next run restores the most recent entry for the same OS. Turborepo replays cached output for packages whose inputs did not change.
+- CI does not filter to affected packages. Every task runs on every PR, and unchanged tasks replay from cache.
 
-**Cache keys:** Based on `pnpm-lock.yaml`, source files, and input options.
+### Measured durations
 
-### Parallel Execution
+Merged run 40951232765 (push to `main`, 2026-10-29): `lint-and-test` about 1 minute, `types-drift` about 2.5 minutes, `database` about 3 minutes, `secrets` under 10 seconds. Jobs run in parallel, so the wall clock is about 3 minutes.
 
-Jobs run in parallel:
-- `lint-and-test` (5m)
-- `database` (4m)
-- `types-drift` (4m)
-- `secrets` (1m)
-
-**Total:** ~5 minutes (parallel > sequential)
-
-### Target: < 10 Minutes
-
-On first run (no cache): ~10 minutes  
-On subsequent runs (cached): ~3-5 minutes
+Median over the last 10 CI runs, including failed runs (`gh run list --workflow CI`): about 2.4 minutes. Target: under 10 minutes.
 
 ## Security
 
 ### gitleaks
 
-Detects leaked secrets using pattern matching:
-- AWS keys, GitHub tokens, Slack webhooks, etc.
-- **Action:** Fails the PR; forces developer to rebase/remove secret
+Detects leaked secrets with its default rules (AWS keys, GitHub tokens, Slack webhooks and others). Fails the PR when it finds one. There is no `.gitleaksignore` yet.
 
-### Service-Role Key Check
+### Service-role key and JWT check
 
-Grep for known JWT patterns and `SUPABASE_SERVICE_ROLE_KEY`:
-
-```bash
-# Fails if found in client code
-grep -r "SUPABASE_SERVICE_ROLE_KEY" apps/mobile/src
-grep -r "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" apps/mobile/src
-```
-
-**Why:** Service role key must never be in app bundle—only on backend.
+See `secrets` check 2 and 3 above. Client code (`apps/`, `packages/`) must never contain the service-role key. `supabase/` is excluded on purpose, because Edge Functions run server-side and may use it.
 
 ## Monitoring & Alerts
 
-### CI Dashboard
-
-GitHub Actions UI shows:
-- Duration of each job
-- Which jobs failed and why
-- Logs for debugging
+GitHub Actions shows each job's duration, its failures and their logs.
 
 ### Re-running CI
 
-If CI fails due to flakiness (rare):
-1. Go to PR
-2. Click "Details" on failed check
-3. Click "Re-run jobs"
+If a job fails for a reason unrelated to the change (rare flakiness), open the PR, click "Details" on the failed check and choose "Re-run jobs". Investigate any repeated failure.
 
 ## Expansion (Future)
 
 ### DEVOPS-04: Build & Deploy
-
-Will add:
-- `pnpm build` — Build mobile and admin apps
-- `expo eas build` — Expo cloud builds
-- Deploy to Vercel (admin)
-- Deploy to App Store / Play Store (mobile)
+- `pnpm build` for the mobile and admin apps
+- `expo eas build` cloud builds
+- Deploy to Vercel (admin) and to the App Store and Play Store (mobile)
 
 ### Data Migration Testing
+Once DATA-14 (audit logging) lands: test that audit trails are created and that historical data stays accessible.
 
-Once DATA-14 (audit logging) lands:
-- Test audit trails are created correctly
-- Verify historical data is accessible
+## Known Gaps
+
+- **Branch protection is not configured.** Until it is, none of these checks blocks a merge.
+- **The pgTAP suite is structural.** `supabase/tests/database/01_init.sql` and `02_identity.sql` check that tables, columns, functions, constraints and policy names exist. They have no behavioural RLS assertions (no `set role`, `throws_ok` or `results_eq`). Behavioural RLS tests belong to DATA-08.
+- **The `db lint` gate found real problems on its first run.** On commit 45398aa the `database` job failed on `public.set_user_role`, which raised the invalid error code `PERM` (fixed by forward-only migration `20261029120000_fix_set_user_role_error_codes.sql`). The same run also reported nine findings from pgTAP's own functions in the `extensions` schema, so the lint now covers `public,private` only. The CLI lint itself could not run locally, because `plpgsql_check` is not installed in the local Postgres; the next CI run is the check.
+- **`pnpm format:check` is not run in CI.** It fails on `main` today: 10 files in `packages/claude` and 1 in `packages/ui`. CONTRIBUTING.md lists it as required.
+- **The seed file is not applied in CI.** A seed that breaks (for example a NOT NULL column added without a default) is not caught.
+- **No affected-only runs.** Turborepo runs every task on every PR.
+- **CI runs Node 18,** which reached end of life in April 2025. Upgrading is a separate change.
 
 ## Troubleshooting
 
-### CI Flaky or Timing Out
+### CI flaky or timing out
 
-1. Check if Supabase startup is slow (Docker issue)
-2. Increase timeout: Edit `.github/workflows/ci.yml`
-3. Run locally to confirm it's not a real issue
+1. The `database` and `types-drift` jobs retry `supabase start` only on Docker registry rate limits: three attempts, 90 seconds apart. Other start failures fail at once.
+2. If `supabase start` is slow, run it locally to confirm the failure is real.
+3. Job timeouts are set with `timeout-minutes` in `.github/workflows/`.
 
-### gitleaks False Positive
+### gitleaks false positive
 
-Some strings trigger gitleaks (e.g., test tokens). Add to `.gitleaksignore`:
+Some strings trigger gitleaks (for example test tokens). Add the exact value to `.gitleaksignore`:
 
 ```
 # .gitleaksignore
@@ -294,15 +196,17 @@ Some strings trigger gitleaks (e.g., test tokens). Add to `.gitleaksignore`:
 test-token-12345
 ```
 
-### Types Drift After Merge
+### Types drift after merge
 
-If types were accidentally committed out of sync:
+Do not push to `main`. Open a PR with the fix:
+
 ```bash
-git checkout main
+git switch -c fix/DEVOPS-02-sync-types
+pnpm db:start
 pnpm db:types
 git add packages/api/src/database.types.ts
 git commit -m "fix: sync types after merge"
-git push
+git push -u origin HEAD
 ```
 
 ## Related Documentation
@@ -310,11 +214,10 @@ git push
 - `.github/workflows/ci.yml` — CI workflow definition
 - `.github/workflows/edge-functions.yml` — Deno tests
 - `supabase/README.md` — Database conventions
-- `CONTRIBUTING.md` — Local development guide
+- `CONTRIBUTING.md` — Branching and commit conventions
 - `README.md` — Quick start and CI checklist
 
 ---
 
-**Owner:** DEV-C (DevOps engineer)  
-**Reviewed by:** DEV-A, DEV-B  
-**Last updated:** October 28, 2024
+**Owner:** DEV-C (DevOps engineer)
+**Last updated:** 2026-10-29
