@@ -223,12 +223,6 @@ pnpm dev
 - [pnpm Workspaces](https://pnpm.io/workspaces)
 - [React Native Testing Library](https://testing-library.com/docs/react-native-testing-library/intro)
 
-## Next Steps
-
-1. **ADM-01**: Finalize admin panel framework (Web? React? Next.js?)
-2. **DATA-01**: Supabase database setup and RLS policies
-3. **AUTH-01**: User authentication flow (OAuth, magic link, etc.)
-4. **DEVOPS-04**: GitHub Actions CI/CD pipeline (lint, test, build, deploy)
 
 ---
 
