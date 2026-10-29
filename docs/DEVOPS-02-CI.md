@@ -31,7 +31,7 @@ Pull request to main
 
 #### Job 2: `database`
 - **Measured duration:** about 3 minutes
-- **Steps:** checkout; install Supabase CLI 2.122.0; `supabase start -x realtime`, retried only on registry rate limits ("Data limit exceeded"); pnpm install; `pnpm db:test` (`supabase test db`, runs `supabase/tests/database/*.sql`); `pnpm db:lint` (`supabase db lint --local --fail-on error`)
+- **Steps:** checkout; install Supabase CLI 2.122.0; `supabase start -x realtime`, retried only on registry rate limits ("Data limit exceeded"); pnpm install; `pnpm db:test` (`supabase test db`, runs `supabase/tests/database/*.sql`); `pnpm db:lint` (`supabase db lint --local --schema public,private --fail-on error`; `extensions` is excluded because pgTAP's own functions there fail lint)
 - **Database:** the Supabase CLI starts its own Postgres container in Docker. The job does not use a separate PostgreSQL service. `supabase start` applies `supabase/migrations/`; the pgTAP tests check tables those migrations create. The seed file is not applied in CI.
 
 #### Job 3: `types-drift`
@@ -115,7 +115,7 @@ git commit -m "chore: regenerate types after schema change"
 Read the test output. Fix the migration by adding a new one (never edit an applied migration), then run `pnpm db:reset && pnpm db:test`.
 
 **Schema lint fails**
-`supabase db lint --fail-on error` reported an error. Fix the reported object, then run `pnpm db:reset && pnpm db:lint`.
+`supabase db lint --schema public,private --fail-on error` reported an error. Fix the reported object, then run `pnpm db:reset && pnpm db:lint`. Check that the error is in our schemas, not pgTAP internals (the `extensions` schema is not linted).
 
 **Lint error**
 Fix the ESLint findings from `pnpm lint`. `pnpm format` applies Prettier formatting only.
@@ -172,7 +172,7 @@ Once DATA-14 (audit logging) lands: test that audit trails are created and that 
 
 - **Branch protection is not configured.** Until it is, none of these checks blocks a merge.
 - **The pgTAP suite is structural.** `supabase/tests/database/01_init.sql` and `02_identity.sql` check that tables, columns, functions, constraints and policy names exist. They have no behavioural RLS assertions (no `set role`, `throws_ok` or `results_eq`). Behavioural RLS tests belong to DATA-08.
-- **`supabase db lint --fail-on error` is new and was not run against a live database.** Docker was unavailable when this was written. The first CI run is the first real check, and it fails if the current schema has lint errors.
+- **The `db lint` gate found real problems on its first run.** On commit 45398aa the `database` job failed on `public.set_user_role`, which raised the invalid error code `PERM` (fixed by forward-only migration `20261029120000_fix_set_user_role_error_codes.sql`). The same run also reported nine findings from pgTAP's own functions in the `extensions` schema, so the lint now covers `public,private` only. The CLI lint itself could not run locally, because `plpgsql_check` is not installed in the local Postgres; the next CI run is the check.
 - **`pnpm format:check` is not run in CI.** It fails on `main` today: 10 files in `packages/claude` and 1 in `packages/ui`. CONTRIBUTING.md lists it as required.
 - **The seed file is not applied in CI.** A seed that breaks (for example a NOT NULL column added without a default) is not caught.
 - **No affected-only runs.** Turborepo runs every task on every PR.

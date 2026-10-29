@@ -258,7 +258,7 @@ git grep -n -I -F -e "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" -e "SUPABASE_SERVICE
 | Check (job) | What it runs |
 |---|---|
 | `lint-and-test` | ESLint, `tsc --noEmit`, Jest, `expo install --check` |
-| `database` | Local Supabase start, pgTAP tests, `supabase db lint --fail-on error` |
+| `database` | Local Supabase start, pgTAP tests, `supabase db lint --schema public,private --fail-on error` |
 | `types-drift` | `pnpm db:types`; fails if `database.types.ts` changes |
 | `secrets` | gitleaks, service-role key grep over `apps/` and `packages/` |
 | `deno-tests` | Edge Function tests, `deno fmt --check`, `deno lint` |
