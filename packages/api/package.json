@@ -18,6 +18,13 @@
     "typecheck": "tsc --noEmit",
     "test": "jest"
   },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "@tanstack/react-query": "^5.28.0"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
   "devDependencies": {
     "@sisig/config": "*",
     "@types/jest": "^29.5.0",
