@@ -1,17 +1,9 @@
 import { useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  ScrollView,
-  StyleSheet,
-  ActivityIndicator,
-  Pressable,
-} from 'react-native';
-import { Button } from '@sisig/ui';
+import { View, ScrollView, StyleSheet, ActivityIndicator, Pressable } from 'react-native';
+import { Button, Text, TextInput, useAppColors, useThemedStyles, type AppColors } from '@sisig/ui';
 import { SUPPORTED_LANGUAGES } from '@sisig/claude';
 
-type Language = typeof SUPPORTED_LANGUAGES[number];
+type Language = (typeof SUPPORTED_LANGUAGES)[number];
 
 interface TranslationState {
   original: string;
@@ -19,6 +11,115 @@ interface TranslationState {
   sourceLanguage: Language;
   targetLanguage: Language;
 }
+
+const createStyles = (c: AppColors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: c.background,
+    },
+    languageSelector: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      gap: 8,
+    },
+    languageControl: {
+      flex: 1,
+      position: 'relative',
+    },
+    label: {
+      fontSize: 12,
+      fontWeight: '600',
+      marginBottom: 4,
+      color: c.foregroundMuted,
+    },
+    languageButton: {
+      backgroundColor: c.surface,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    languageButtonText: {
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    swapButton: {
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      marginBottom: 2,
+    },
+    dropdown: {
+      position: 'absolute',
+      top: 60,
+      left: 0,
+      right: 0,
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 6,
+      maxHeight: 200,
+      zIndex: 1000,
+    },
+    dropdownItem: {
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    dropdownText: {
+      fontSize: 14,
+    },
+    section: {
+      padding: 16,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      marginBottom: 12,
+    },
+    textInput: {
+      backgroundColor: c.surface,
+      borderRadius: 8,
+      padding: 12,
+      fontSize: 14,
+      minHeight: 120,
+      textAlignVertical: 'top',
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    buttonContainer: {
+      flexDirection: 'row',
+      paddingHorizontal: 16,
+      gap: 12,
+    },
+    button: {
+      flex: 1,
+    },
+    loadingContainer: {
+      padding: 32,
+      alignItems: 'center',
+    },
+    loadingText: {
+      marginTop: 12,
+      fontSize: 14,
+      color: c.foregroundMuted,
+    },
+    resultBox: {
+      backgroundColor: c.surface,
+      borderRadius: 8,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    resultText: {
+      fontSize: 14,
+      lineHeight: 20,
+    },
+  });
 
 export default function AITranslatorScreen(): JSX.Element {
   const [input, setInput] = useState<string>('');
@@ -28,6 +129,8 @@ export default function AITranslatorScreen(): JSX.Element {
   const [loading, setLoading] = useState<boolean>(false);
   const [showSourceDropdown, setShowSourceDropdown] = useState<boolean>(false);
   const [showTargetDropdown, setShowTargetDropdown] = useState<boolean>(false);
+  const colors = useAppColors();
+  const styles = useThemedStyles(createStyles);
 
   const handleTranslate = async (): Promise<void> => {
     if (!input.trim()) return;
@@ -137,21 +240,13 @@ const result = await translateText(input, sourceLanguage, targetLanguage);`;
       </View>
 
       <View style={styles.buttonContainer}>
-        <Button
-          title="Translate"
-          onPress={handleTranslate}
-          style={styles.button}
-        />
-        <Button
-          title="Clear"
-          onPress={handleClear}
-          style={styles.button}
-        />
+        <Button title="Translate" onPress={handleTranslate} style={styles.button} />
+        <Button title="Clear" onPress={handleClear} style={styles.button} />
       </View>
 
       {loading && (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
+          <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Translating...</Text>
         </View>
       )}
@@ -167,112 +262,3 @@ const result = await translateText(input, sourceLanguage, targetLanguage);`;
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  languageSelector: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  languageControl: {
-    flex: 1,
-    position: 'relative',
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 4,
-    color: '#666',
-  },
-  languageButton: {
-    backgroundColor: '#ffffff',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  languageButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  swapButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginBottom: 2,
-  },
-  dropdown: {
-    position: 'absolute',
-    top: 60,
-    left: 0,
-    right: 0,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 6,
-    maxHeight: 200,
-    zIndex: 1000,
-  },
-  dropdownItem: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  dropdownText: {
-    fontSize: 14,
-  },
-  section: {
-    padding: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  textInput: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 14,
-    minHeight: 120,
-    textAlignVertical: 'top',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  buttonContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    gap: 12,
-  },
-  button: {
-    flex: 1,
-  },
-  loadingContainer: {
-    padding: 32,
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: '#666',
-  },
-  resultBox: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  resultText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#333',
-  },
-});

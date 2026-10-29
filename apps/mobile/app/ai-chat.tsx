@@ -1,13 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  ScrollView,
-  StyleSheet,
-  ActivityIndicator,
-} from 'react-native';
-import { Button } from '@sisig/ui';
+import { View, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
+import { Button, Text, TextInput, useAppColors, useThemedStyles, type AppColors } from '@sisig/ui';
 import { ConversationManager } from '@sisig/claude';
 
 interface Message {
@@ -16,12 +9,91 @@ interface Message {
   content: string;
 }
 
+const createStyles = (c: AppColors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: c.background,
+    },
+    header: {
+      paddingVertical: 16,
+      paddingHorizontal: 16,
+      backgroundColor: c.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    title: {
+      fontSize: 20,
+      fontWeight: '600',
+    },
+    messagesContainer: {
+      flex: 1,
+      paddingHorizontal: 16,
+    },
+    messagesContent: {
+      paddingVertical: 16,
+    },
+    messageBubble: {
+      marginVertical: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 12,
+      maxWidth: '85%',
+    },
+    userBubble: {
+      alignSelf: 'flex-end',
+      backgroundColor: c.primary,
+    },
+    assistantBubble: {
+      alignSelf: 'flex-start',
+      backgroundColor: c.bubble,
+    },
+    messageText: {
+      fontSize: 16,
+      lineHeight: 20,
+    },
+    userText: {
+      color: c.primaryForeground,
+    },
+    assistantText: {
+      color: c.bubbleForeground,
+    },
+    loadingContainer: {
+      paddingVertical: 16,
+      alignItems: 'center',
+    },
+    inputContainer: {
+      flexDirection: 'row',
+      padding: 12,
+      backgroundColor: c.surface,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+      gap: 8,
+    },
+    input: {
+      flex: 1,
+      backgroundColor: c.background,
+      borderRadius: 20,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      fontSize: 16,
+      maxHeight: 100,
+    },
+    sendButton: {
+      paddingVertical: 10,
+      paddingHorizontal: 20,
+      justifyContent: 'center',
+    },
+  });
+
 export default function AIChatScreen(): JSX.Element {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const conversationManager = useRef(new ConversationManager()).current;
+  const colors = useAppColors();
+  const styles = useThemedStyles(createStyles);
 
   const scrollToBottom = (): void => {
     scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -85,9 +157,7 @@ export default function AIChatScreen(): JSX.Element {
             <Text
               style={[
                 styles.messageText,
-                msg.role === 'user'
-                  ? styles.userText
-                  : styles.assistantText,
+                msg.role === 'user' ? styles.userText : styles.assistantText,
               ]}
             >
               {msg.content}
@@ -96,7 +166,7 @@ export default function AIChatScreen(): JSX.Element {
         ))}
         {loading && (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#007AFF" />
+            <ActivityIndicator size="large" color={colors.primary} />
           </View>
         )}
       </ScrollView>
@@ -110,88 +180,8 @@ export default function AIChatScreen(): JSX.Element {
           editable={!loading}
           multiline
         />
-        <Button
-          title="Send"
-          onPress={handleSendMessage}
-          style={styles.sendButton}
-        />
+        <Button title="Send" onPress={handleSendMessage} style={styles.sendButton} />
       </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  header: {
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '600',
-  },
-  messagesContainer: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
-  messagesContent: {
-    paddingVertical: 16,
-  },
-  messageBubble: {
-    marginVertical: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    maxWidth: '85%',
-  },
-  userBubble: {
-    alignSelf: 'flex-end',
-    backgroundColor: '#007AFF',
-  },
-  assistantBubble: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#e5e5ea',
-  },
-  messageText: {
-    fontSize: 16,
-    lineHeight: 20,
-  },
-  userText: {
-    color: '#ffffff',
-  },
-  assistantText: {
-    color: '#000000',
-  },
-  loadingContainer: {
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    padding: 12,
-    backgroundColor: '#ffffff',
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
-    gap: 8,
-  },
-  input: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    fontSize: 16,
-    maxHeight: 100,
-  },
-  sendButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    justifyContent: 'center',
-  },
-});

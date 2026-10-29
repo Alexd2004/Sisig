@@ -1,6 +1,7 @@
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { ComponentProps } from 'react';
+import { Text, useAppColors, useThemedStyles, type AppColors } from '@sisig/ui';
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -14,17 +15,80 @@ const MENU_ITEMS = [
   { icon: 'logout', label: 'Sign Out', screen: 'signout' },
 ];
 
-function MenuItemCard({ icon, label, onPress }: { icon: string; label: string; onPress: () => void }): JSX.Element {
+const createStyles = (c: AppColors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: c.background,
+    },
+    section: {
+      padding: 16,
+    },
+    sectionTitle: {
+      fontSize: 24,
+      fontWeight: 'bold',
+    },
+    menuItem: {
+      backgroundColor: c.surface,
+      marginHorizontal: 16,
+      marginVertical: 6,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      borderRadius: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    menuLabel: {
+      flex: 1,
+      marginLeft: 16,
+      fontSize: 16,
+      fontWeight: '500',
+    },
+    footerCard: {
+      alignItems: 'center',
+      padding: 32,
+    },
+    footerText: {
+      fontSize: 16,
+      fontWeight: '600',
+      marginBottom: 4,
+    },
+    versionText: {
+      fontSize: 12,
+      color: c.placeholder,
+      marginBottom: 8,
+    },
+    copyrightText: {
+      fontSize: 11,
+      color: c.placeholder,
+    },
+  });
+
+function MenuItemCard({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: string;
+  label: string;
+  onPress: () => void;
+}): JSX.Element {
+  const colors = useAppColors();
+  const styles = useThemedStyles(createStyles);
   return (
     <Pressable style={styles.menuItem} onPress={onPress}>
-      <MaterialCommunityIcons name={icon as IconName} size={24} color="#007AFF" />
+      <MaterialCommunityIcons name={icon as IconName} size={24} color={colors.primary} />
       <Text style={styles.menuLabel}>{label}</Text>
-      <MaterialCommunityIcons name="chevron-right" size={24} color="#ccc" />
+      <MaterialCommunityIcons name="chevron-right" size={24} color={colors.placeholder} />
     </Pressable>
   );
 }
 
 export default function MoreScreen(): JSX.Element {
+  const styles = useThemedStyles(createStyles);
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.section}>
@@ -48,54 +112,3 @@ export default function MoreScreen(): JSX.Element {
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  section: {
-    padding: 16,
-  },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  menuItem: {
-    backgroundColor: '#ffffff',
-    marginHorizontal: 16,
-    marginVertical: 6,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  menuLabel: {
-    flex: 1,
-    marginLeft: 16,
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
-  },
-  footerCard: {
-    alignItems: 'center',
-    padding: 32,
-  },
-  footerText: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  versionText: {
-    fontSize: 12,
-    color: '#999',
-    marginBottom: 8,
-  },
-  copyrightText: {
-    fontSize: 11,
-    color: '#bbb',
-  },
-});
