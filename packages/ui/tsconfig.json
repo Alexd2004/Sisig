@@ -1,5 +1,5 @@
 {
-  "extends": "@sisig/config/tsconfig.json",
+  "extends": "@sisig/config/tsconfig",
   "compilerOptions": {
     "jsx": "react-native"
   },

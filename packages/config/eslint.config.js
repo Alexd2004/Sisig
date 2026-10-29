@@ -17,7 +17,6 @@ module.exports = {
       parser: '@typescript-eslint/parser',
       extends: ['expo', 'plugin:@typescript-eslint/recommended'],
       rules: {
-        '@typescript-eslint/explicit-function-return-types': 'warn',
         '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       },
     },

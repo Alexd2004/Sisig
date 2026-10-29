@@ -18,7 +18,7 @@ export interface ContentBlock {
 export interface MessageResponse {
   id: string;
   content: ContentBlock[];
-  stopReason: string;
+  stopReason: string | null;
 }
 
 export class ClaudeClient {

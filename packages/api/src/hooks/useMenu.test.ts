@@ -1,5 +1,3 @@
-import { useMenu, useMenuCategories, useProduct } from './useMenu';
-
 describe('useMenu Hooks', () => {
   // Note: These are example test structures.
   // Real tests would mock SupabaseClient and QueryClient.

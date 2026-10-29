@@ -6,7 +6,7 @@ import {
 import { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from './database.types';
 import { keys } from './query-keys';
-import { normalizeError, AppError } from './client';
+import { normalizeError } from './client';
 
 type Order = Database['public']['Tables']['orders']['Insert'];
 type OrderItem = Database['public']['Tables']['order_items']['Insert'];
