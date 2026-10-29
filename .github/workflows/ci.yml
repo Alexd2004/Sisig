@@ -174,34 +174,45 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # grep exits 2 when a path is missing, even if it found matches elsewhere, so the
+      # old `if grep ...; then` form passed silently. Scan only existing directories and
+      # fail on matches or on any grep error (exit 2).
       - name: Check for service-role key in bundle
         run: |
-          if grep -r "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" \
-            apps/mobile/src \
-            apps/admin/src \
-            packages/api/src \
-            --include="*.ts" \
-            --include="*.tsx" \
-            --include="*.js" \
-            --include="*.jsx"; then
-            echo "✗ Service-role key or JWT pattern found in source code"
+          DIRS=""
+          for d in apps/mobile/app apps/mobile/src apps/admin/src packages/api/src; do
+            if [ -d "$d" ]; then DIRS="$DIRS $d"; fi
+          done
+          [ -n "$DIRS" ] || { echo "✗ No client source directories found"; exit 1; }
+          rc=0
+          MATCHES=$(grep -rl "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" $DIRS \
+            --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx") || rc=$?
+          if [ "$rc" -eq 0 ]; then
+            echo "✗ Service-role key or JWT pattern found in source code:"
+            echo "$MATCHES"
             exit 1
-          else
-            echo "✓ No service-role keys detected in bundle"
+          elif [ "$rc" -ne 1 ]; then
+            echo "✗ grep failed with exit code $rc"
+            exit "$rc"
           fi
+          echo "✓ No service-role keys detected in bundle"
 
       - name: Check for SUPABASE_SERVICE_ROLE_KEY references
         run: |
-          if grep -r "SUPABASE_SERVICE_ROLE_KEY" \
-            apps/mobile/src \
-            apps/admin/src \
-            packages/api/src \
-            --include="*.ts" \
-            --include="*.tsx" \
-            --include="*.js" \
-            --include="*.jsx"; then
-            echo "✗ Service role key reference found in client code"
+          DIRS=""
+          for d in apps/mobile/app apps/mobile/src apps/admin/src packages/api/src; do
+            if [ -d "$d" ]; then DIRS="$DIRS $d"; fi
+          done
+          [ -n "$DIRS" ] || { echo "✗ No client source directories found"; exit 1; }
+          rc=0
+          MATCHES=$(grep -rl "SUPABASE_SERVICE_ROLE_KEY" $DIRS \
+            --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx") || rc=$?
+          if [ "$rc" -eq 0 ]; then
+            echo "✗ Service role key reference found in client code:"
+            echo "$MATCHES"
             exit 1
-          else
-            echo "✓ No service-role key references in client code"
+          elif [ "$rc" -ne 1 ]; then
+            echo "✗ grep failed with exit code $rc"
+            exit "$rc"
           fi
+          echo "✓ No service-role key references in client code"

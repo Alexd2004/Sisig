@@ -1,163 +1,161 @@
 import * as SecureStore from 'expo-secure-store';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { StorageAdapter } from '@sisig/api';
 import * as Crypto from 'expo-crypto';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { gcm } from '@noble/ciphers/aes';
+import { bytesToHex, bytesToUtf8, hexToBytes, utf8ToBytes } from '@noble/ciphers/utils';
+import type { StorageAdapter } from '@sisig/api';
 
 /**
- * Secure session storage for React Native.
+ * Encrypted session storage for React Native (Supabase `auth.storage`).
  *
- * Pattern: Store AES encryption key in Keychain (SecureStore),
- * and encrypted session JSON in AsyncStorage (cheaper).
+ * - A random 256-bit AES key lives in the device keystore (expo-secure-store).
+ * - Every value is sealed with AES-256-GCM under a fresh 96-bit nonce and stored as
+ *   ciphertext in AsyncStorage. Tokens never reach AsyncStorage in plaintext.
  *
- * Why: Supabase session can exceed 2KB, which exceeds SecureStore recommendations.
+ * SecureStore is not used for the session itself: a Supabase session can exceed the
+ * ~2KB value size SecureStore is meant for, so only the small key is stored there.
  */
 
-const SECURE_KEY_NAME = 'sisig_session_key';
-const SESSION_KEY_NAME = 'sisig_session_encrypted';
-const IV_KEY_NAME = 'sisig_session_iv';
+const KEY_NAME = 'sisig_session_key';
+const SECURE_OPTIONS = {
+  keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+};
 
-/**
- * Generate or retrieve AES encryption key from Keychain.
- */
-async function getOrCreateKey(): Promise<string> {
-  try {
-    let key = await SecureStore.getItemAsync(SECURE_KEY_NAME);
+/** AsyncStorage namespace for sealed entries. */
+const ENTRY_PREFIX = 'sisig.secure.v1:';
+/** Entries written by an earlier placeholder implementation. Purged on logout. */
+const LEGACY_ENTRY_KEYS = ['sisig_session_encrypted', 'sisig_session_iv'];
 
-    if (!key) {
-      // Generate random 32-byte (256-bit) key
-      key = await Crypto.randomUUID();
-      await SecureStore.setItemAsync(SECURE_KEY_NAME, key);
-    }
+const KEY_BYTES = 32;
+const NONCE_BYTES = 12;
 
-    return key;
-  } catch (error) {
-    console.error('Failed to manage encryption key:', error);
-    throw error;
-  }
-}
-
-/**
- * Encrypt session JSON with AES-256-GCM.
- */
-async function encryptSession(session: string, key: string): Promise<{
-  encrypted: string;
+interface SealedEntry {
+  v: 1;
   iv: string;
-}> {
+  ct: string;
+}
+
+function entryName(key: string): string {
+  return `${ENTRY_PREFIX}${key}`;
+}
+
+function isSealedEntry(value: unknown): value is SealedEntry {
+  const entry = value as Partial<SealedEntry> | null;
+  return (
+    typeof entry === 'object' &&
+    entry !== null &&
+    entry.v === 1 &&
+    typeof entry.iv === 'string' &&
+    typeof entry.ct === 'string'
+  );
+}
+
+/** Returns the stored AES key, or null when none exists or the stored value is malformed. */
+async function loadKey(): Promise<Uint8Array | null> {
+  const stored = await SecureStore.getItemAsync(KEY_NAME, SECURE_OPTIONS);
+  if (!stored) {
+    return null;
+  }
   try {
-    // Generate random IV
-    const iv = await Crypto.randomUUID();
-
-    // In production, use a proper crypto library like:
-    // - expo-crypto (limited)
-    // - react-native-crypto
-    // - libsodium via react-native-sodium
-
-    // For now, use Crypto.digestStringAsync with a placeholder
-    // In real code, use proper AES encryption
-    const encrypted = await Crypto.digestStringAsync(
-      Crypto.CryptoDigestAlgorithm.SHA256,
-      session + key,
-    );
-
-    return { encrypted, iv };
-  } catch (error) {
-    console.error('Failed to encrypt session:', error);
-    throw error;
+    const key = hexToBytes(stored);
+    return key.length === KEY_BYTES ? key : null;
+  } catch {
+    return null;
   }
 }
 
+async function getOrCreateKey(): Promise<Uint8Array> {
+  const existing = await loadKey();
+  if (existing) {
+    return existing;
+  }
+  const key = Crypto.getRandomBytes(KEY_BYTES);
+  await SecureStore.setItemAsync(KEY_NAME, bytesToHex(key), SECURE_OPTIONS);
+  return key;
+}
+
+async function seal(plaintext: string): Promise<string> {
+  const key = await getOrCreateKey();
+  const nonce = Crypto.getRandomBytes(NONCE_BYTES);
+  const ciphertext = gcm(key, nonce).encrypt(utf8ToBytes(plaintext));
+  const entry: SealedEntry = { v: 1, iv: bytesToHex(nonce), ct: bytesToHex(ciphertext) };
+  return JSON.stringify(entry);
+}
+
 /**
- * Decrypt session JSON with AES-256-GCM.
+ * Returns the plaintext, or null when the entry cannot be authenticated
+ * (key was reset, entry was tampered with, or the data is corrupt).
  */
-async function decryptSession(
-  _encrypted: string,
-  _key: string,
-  _iv: string,
-): Promise<string | null> {
-  try {
-    // In production, use proper AES decryption
-    // This is a placeholder; real implementation needs actual decryption
+async function open(sealed: string): Promise<string | null> {
+  const key = await loadKey();
+  if (!key) {
     return null;
-  } catch (error) {
-    console.error('Failed to decrypt session:', error);
+  }
+
+  let entry: unknown;
+  try {
+    entry = JSON.parse(sealed);
+  } catch {
+    return null;
+  }
+  if (!isSealedEntry(entry)) {
+    return null;
+  }
+
+  try {
+    // GCM verifies the auth tag and throws on any mismatch.
+    const plaintext = gcm(key, hexToBytes(entry.iv)).decrypt(hexToBytes(entry.ct));
+    return bytesToUtf8(plaintext);
+  } catch {
     return null;
   }
 }
 
 /**
- * React Native secure session storage adapter.
- * Uses SecureStore for encryption key, AsyncStorage for encrypted session.
+ * Supabase storage adapter backed by AES-256-GCM. Every key is sealed, not only the session.
  */
 export const nativeSessionStorage: StorageAdapter = {
   async getItem(key: string): Promise<string | null> {
-    if (key !== 'sb-auth-session') {
-      // For non-session keys, just use AsyncStorage
-      return AsyncStorage.getItem(key);
-    }
-
     try {
-      const encryptionKey = await getOrCreateKey();
-      const encryptedData = await AsyncStorage.getItem(SESSION_KEY_NAME);
-      const iv = await AsyncStorage.getItem(IV_KEY_NAME);
-
-      if (!encryptedData || !iv) {
+      const sealed = await AsyncStorage.getItem(entryName(key));
+      if (sealed === null) {
         return null;
       }
 
-      const decrypted = await decryptSession(encryptedData, encryptionKey, iv);
-      return decrypted;
+      const value = await open(sealed);
+      if (value === null) {
+        // Unreadable entries are dropped so the user signs in again instead of looping.
+        await AsyncStorage.removeItem(entryName(key));
+      }
+      return value;
     } catch (error) {
-      console.error('Session storage getItem failed:', error);
+      // Keychain errors (for example, the device is locked) must not wipe the entry.
+      console.error('Session storage read failed:', error);
       return null;
     }
   },
 
   async setItem(key: string, value: string): Promise<void> {
-    if (key !== 'sb-auth-session') {
-      // For non-session keys, just use AsyncStorage
-      await AsyncStorage.setItem(key, value);
-      return;
-    }
-
-    try {
-      const encryptionKey = await getOrCreateKey();
-      const { encrypted, iv } = await encryptSession(value, encryptionKey);
-
-      await AsyncStorage.setItem(SESSION_KEY_NAME, encrypted);
-      await AsyncStorage.setItem(IV_KEY_NAME, iv);
-    } catch (error) {
-      console.error('Session storage setItem failed:', error);
-      throw error;
-    }
+    await AsyncStorage.setItem(entryName(key), await seal(value));
   },
 
   async removeItem(key: string): Promise<void> {
-    if (key !== 'sb-auth-session') {
-      // For non-session keys, just use AsyncStorage
-      await AsyncStorage.removeItem(key);
-      return;
-    }
-
-    try {
-      await AsyncStorage.removeItem(SESSION_KEY_NAME);
-      await AsyncStorage.removeItem(IV_KEY_NAME);
-      // Keep the encryption key for future sessions
-    } catch (error) {
-      console.error('Session storage removeItem failed:', error);
-      throw error;
-    }
+    await AsyncStorage.removeItem(entryName(key));
   },
 };
 
 /**
- * Clear all session data (used on logout).
+ * Purge all encrypted session data (called on logout).
+ * The AES key is deleted first: once it is gone, any ciphertext left behind is unreadable.
  */
 export async function clearSessionStorage(): Promise<void> {
-  try {
-    await AsyncStorage.multiRemove([SESSION_KEY_NAME, IV_KEY_NAME]);
-    // Don't remove encryption key; it can be reused for next session
-  } catch (error) {
-    console.error('Failed to clear session storage:', error);
-    throw error;
+  await SecureStore.deleteItemAsync(KEY_NAME, SECURE_OPTIONS);
+
+  const allKeys = await AsyncStorage.getAllKeys();
+  const entries = allKeys.filter(
+    (key) => key.startsWith(ENTRY_PREFIX) || LEGACY_ENTRY_KEYS.includes(key)
+  );
+  if (entries.length > 0) {
+    await AsyncStorage.multiRemove(entries);
   }
 }

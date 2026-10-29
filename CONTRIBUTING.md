@@ -140,6 +140,52 @@ Expo's built-in monorepo support via Metro is configured. Verify with:
 expo-doctor
 ```
 
+## Data Layer
+
+The shared data layer lives in `packages/api` (`@sisig/api`). The mobile wiring is in `apps/mobile/src/lib`.
+
+### Configuration
+
+Set these in a local `.env.local` (never commit it). Expo inlines `EXPO_PUBLIC_*` values into the bundle, so they must be public:
+
+- `EXPO_PUBLIC_SUPABASE_URL`
+- `EXPO_PUBLIC_SUPABASE_ANON_KEY`: anon key only. A service-role key must never reach the app; CI scans for it.
+
+### Client, session and logout
+
+- Create Supabase clients only with `createSupabaseClient` (`@sisig/api`). The app's single client is `apps/mobile/src/lib/supabase.ts`.
+- Sessions are stored only through `nativeSessionStorage` (AES-256-GCM, key in SecureStore). Never write tokens to AsyncStorage directly.
+- Token auto-refresh runs only while the app is active (`attachSessionLifecycle`).
+- Logout calls `signOutAndPurge` (`apps/mobile/src/lib/logout.ts`). It clears the session, the encrypted entries and key, the query cache and the persisted cache. Any new per-user store must be added to that function.
+
+### Query keys and hooks
+
+- Add every query key to the `keys` factory in `packages/api/src/query-keys.ts`. Never inline key arrays. Invalidate by prefix, for example `keys.menu.all()`.
+- Expose each query as `xxxQueryOptions(client)` plus a thin `useXxx` wrapper, as `useMenuCategories` does. Test the options with `createQueryClient().fetchQuery(...)` (see `packages/api/src/hooks/useMenu.test.ts`).
+- Use `createQueryClient()` for the app's QueryClient. Queries retry only network and 5xx failures. RLS and 4xx failures fail immediately. Mutations never retry.
+
+### Errors
+
+- Throw `normalizeError(error)` from queries and mutations. It returns an `AppError` with a fixed, user-safe `message`. Show `error.message` to users and never a raw server message. `error.code` is stable and safe to branch on.
+
+### Writes
+
+- Points, redemptions and orders change only through RPCs or Edge Functions, never by direct table writes. `useCreateOrder` in `packages/api/src/mutations.ts` predates this rule and is pending migration. Do not copy its pattern.
+- Optimistic updates use `optimisticUpdate`, which rolls back on error.
+
+### Offline persistence
+
+- Only query keys on the allowlist in `persistedQueryKeyPrefixes` (`packages/api/src/query-keys.ts`) are written to disk: the menu and the rewards catalogue. Points, profile, orders and auth are never persisted.
+- Mutations are never persisted. `persistOptions` in `apps/mobile/src/lib/query-persistence.ts` is the options object for `PersistQueryClientProvider`.
+- Add a key to the allowlist only if its data is not personal.
+
+### Tests
+
+```bash
+pnpm --filter @sisig/api test
+pnpm --filter @sisig/mobile test
+```
+
 ## TypeScript Strict Mode
 
 All packages enforce `strict: true`. No `any` types—use proper typing.
