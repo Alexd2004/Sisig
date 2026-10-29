@@ -10,8 +10,7 @@ export const keys = {
   },
   menu: {
     all: () => ['menu'] as const,
-    list: (filters?: Record<string, unknown>) =>
-      ['menu', 'list', filters] as const,
+    list: (filters?: Record<string, unknown>) => ['menu', 'list', filters] as const,
     categories: () => ['menu', 'categories'] as const,
     item: (id: string) => ['menu', 'item', id] as const,
   },
@@ -34,10 +33,18 @@ export const keys = {
 } as const;
 
 /**
- * Queries that are safe to persist to disk (no personal data).
- * Loyalty, profile, and orders are not persisted.
+ * Allowlist of query-key prefixes that may be written to disk (no personal data).
+ * A query is persisted only if its key starts with one of these prefixes:
+ * ['menu'] covers every menu query, ['loyalty', 'rewards'] only the rewards catalogue.
+ * Loyalty points, profile, orders and auth are never persisted.
  */
-export const persistedQueryKeys = [
-  ...keys.menu.all(),
-  ...keys.loyalty.rewards(),
+export const persistedQueryKeyPrefixes: readonly (readonly unknown[])[] = [
+  keys.menu.all(),
+  keys.loyalty.rewards(),
 ];
+
+export function shouldPersistQuery(queryKey: readonly unknown[]): boolean {
+  return persistedQueryKeyPrefixes.some((prefix) =>
+    prefix.every((part, index) => queryKey[index] === part)
+  );
+}
