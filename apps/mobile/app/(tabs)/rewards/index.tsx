@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { router } from 'expo-router';
 import { Button } from '@sisig/ui';
 
 export default function RewardsScreen(): JSX.Element {
@@ -18,7 +19,7 @@ export default function RewardsScreen(): JSX.Element {
             <Text style={styles.rewardName}>Free Drink</Text>
             <Text style={styles.rewardCost}>500 points</Text>
           </View>
-          <Button title="Redeem" onPress={() => {}} />
+          <Button title="Redeem" onPress={() => router.push('/redeem-confirm')} />
         </View>
 
         <View style={styles.rewardCard}>
@@ -26,7 +27,7 @@ export default function RewardsScreen(): JSX.Element {
             <Text style={styles.rewardName}>Burger Combo</Text>
             <Text style={styles.rewardCost}>750 points</Text>
           </View>
-          <Button title="Redeem" onPress={() => {}} />
+          <Button title="Redeem" onPress={() => router.push('/redeem-confirm')} />
         </View>
 
         <View style={styles.rewardCard}>
@@ -34,7 +35,7 @@ export default function RewardsScreen(): JSX.Element {
             <Text style={styles.rewardName}>$10 Discount</Text>
             <Text style={styles.rewardCost}>1000 points</Text>
           </View>
-          <Button title="Redeem" onPress={() => {}} />
+          <Button title="Redeem" onPress={() => router.push('/redeem-confirm')} />
         </View>
       </View>
 

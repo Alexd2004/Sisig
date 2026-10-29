@@ -1,11 +1,13 @@
 import { Tabs } from 'expo-router';
 import { TabBarIcon } from '../../src/components/TabBarIcon';
+import { popTabStackToRoot } from '../../src/navigation/pop-to-root';
 
 export default function TabsLayout(): JSX.Element {
   return (
     <Tabs
       screenOptions={{
-        headerShown: true,
+        // Each tab renders its own Stack, which draws the header.
+        headerShown: false,
         tabBarActiveTintColor: '#007AFF',
         tabBarInactiveTintColor: '#999999',
         tabBarStyle: {
@@ -16,12 +18,14 @@ export default function TabsLayout(): JSX.Element {
           height: 60,
         },
       }}
+      screenListeners={({ navigation, route }) => ({
+        tabPress: () => popTabStackToRoot(navigation, route.key),
+      })}
     >
       <Tabs.Screen
         name="home"
         options={{
           title: 'Home',
-          headerTitle: 'Sisig Eh!',
           tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
           tabBarAccessibilityLabel: 'Home tab',
         }}
@@ -30,7 +34,6 @@ export default function TabsLayout(): JSX.Element {
         name="order"
         options={{
           title: 'Order',
-          headerTitle: 'Place an Order',
           tabBarIcon: ({ color }) => <TabBarIcon name="cart" color={color} />,
           tabBarAccessibilityLabel: 'Order tab',
         }}
@@ -39,7 +42,6 @@ export default function TabsLayout(): JSX.Element {
         name="rewards"
         options={{
           title: 'Rewards',
-          headerTitle: 'My Points',
           tabBarIcon: ({ color }) => <TabBarIcon name="star" color={color} />,
           tabBarAccessibilityLabel: 'Rewards tab',
         }}
@@ -48,7 +50,6 @@ export default function TabsLayout(): JSX.Element {
         name="code"
         options={{
           title: 'Code',
-          headerTitle: 'My Code',
           tabBarIcon: ({ color }) => <TabBarIcon name="qrcode" color={color} />,
           tabBarAccessibilityLabel: 'Code tab',
         }}
@@ -57,7 +58,6 @@ export default function TabsLayout(): JSX.Element {
         name="more"
         options={{
           title: 'More',
-          headerTitle: 'More',
           tabBarIcon: ({ color }) => <TabBarIcon name="menu" color={color} />,
           tabBarAccessibilityLabel: 'More tab',
         }}

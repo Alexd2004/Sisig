@@ -1,6 +1,8 @@
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import type { ComponentProps } from 'react';
+import { useSession } from '../../../src/session/session';
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -11,10 +13,17 @@ const MENU_ITEMS = [
   { icon: 'information', label: 'About', screen: 'about' },
   { icon: 'help-circle', label: 'Help & Support', screen: 'help' },
   { icon: 'cog', label: 'Settings', screen: 'settings' },
-  { icon: 'logout', label: 'Sign Out', screen: 'signout' },
 ];
 
-function MenuItemCard({ icon, label, onPress }: { icon: string; label: string; onPress: () => void }): JSX.Element {
+function MenuItemCard({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: string;
+  label: string;
+  onPress: () => void;
+}): JSX.Element {
   return (
     <Pressable style={styles.menuItem} onPress={onPress}>
       <MaterialCommunityIcons name={icon as IconName} size={24} color="#007AFF" />
@@ -25,6 +34,15 @@ function MenuItemCard({ icon, label, onPress }: { icon: string; label: string; o
 }
 
 export default function MoreScreen(): JSX.Element {
+  const { status, signOut } = useSession();
+  const isSignedIn = status === 'signed-in';
+
+  const handleSignOut = (): void => {
+    signOut().catch((error: unknown) => {
+      console.error('Sign out failed:', error);
+    });
+  };
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.section}>
@@ -39,6 +57,16 @@ export default function MoreScreen(): JSX.Element {
           onPress={() => console.log(`Navigate to ${item.screen}`)}
         />
       ))}
+
+      <MenuItemCard
+        icon={isSignedIn ? 'logout' : 'login'}
+        label={isSignedIn ? 'Sign Out' : 'Sign In'}
+        onPress={
+          isSignedIn
+            ? handleSignOut
+            : () => router.push({ pathname: '/login', params: { returnTo: '/more' } })
+        }
+      />
 
       <View style={styles.footerCard}>
         <Text style={styles.footerText}>Sisig Eh! Mobile App</Text>
