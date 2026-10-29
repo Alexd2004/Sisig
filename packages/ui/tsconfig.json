@@ -1,6 +1,8 @@
 {
   "extends": "@sisig/config/tsconfig",
   "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
     "jsx": "react-native"
   },
   "include": ["src"]

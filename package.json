@@ -25,8 +25,7 @@
     "db:new": "supabase migration new"
   },
   "devDependencies": {
-    "@supabase/cli": "^1.0.0",
-    "supabase": "^1.0.0",
+    "supabase": "^2.122.0",
     "turbo": "^2.0.0"
   },
   "dependencies": {

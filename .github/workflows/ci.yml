@@ -38,7 +38,7 @@ jobs:
         run: pnpm typecheck
 
       - name: Unit tests
-        run: pnpm test -- --coverage
+        run: pnpm test
 
       - name: Check Expo dependencies
         run: pnpm -F @sisig/mobile exec expo install --check
@@ -52,12 +52,27 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Supabase CLI
-        run: npm install -g supabase
+        run: npm install -g supabase@2.122.0
 
       - name: Start Supabase (auto-applies migrations)
+        # Image pulls from public.ecr.aws are rate-limited on shared runners.
+        # Retry only on that error; any other failure fails the job right away.
         run: |
-          supabase start -x realtime
-          echo "Supabase started successfully"
+          set -o pipefail
+          for attempt in 1 2 3; do
+            if supabase start -x realtime 2>&1 | tee "${RUNNER_TEMP}/supabase-start.log"; then
+              echo "Supabase started successfully"
+              exit 0
+            fi
+            if ! grep -q "Data limit exceeded" "${RUNNER_TEMP}/supabase-start.log"; then
+              echo "supabase start failed for a non-transient reason"
+              exit 1
+            fi
+            echo "Registry rate limit hit (attempt $attempt), retrying in 90s"
+            supabase stop --no-backup || true
+            sleep 90
+          done
+          exit 1
 
       - name: Wait for database to be ready
         run: |
@@ -91,12 +106,27 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Supabase CLI
-        run: npm install -g supabase
+        run: npm install -g supabase@2.122.0
 
       - name: Start Supabase (auto-applies migrations)
+        # Image pulls from public.ecr.aws are rate-limited on shared runners.
+        # Retry only on that error; any other failure fails the job right away.
         run: |
-          supabase start -x realtime
-          echo "Supabase started successfully"
+          set -o pipefail
+          for attempt in 1 2 3; do
+            if supabase start -x realtime 2>&1 | tee "${RUNNER_TEMP}/supabase-start.log"; then
+              echo "Supabase started successfully"
+              exit 0
+            fi
+            if ! grep -q "Data limit exceeded" "${RUNNER_TEMP}/supabase-start.log"; then
+              echo "supabase start failed for a non-transient reason"
+              exit 1
+            fi
+            echo "Registry rate limit hit (attempt $attempt), retrying in 90s"
+            supabase stop --no-backup || true
+            sleep 90
+          done
+          exit 1
 
       - name: Wait for database to be ready
         run: |

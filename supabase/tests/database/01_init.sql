@@ -1,7 +1,7 @@
 -- pgTAP tests for database initialization
 
 begin;
-select plan(15);
+select plan(16);
 
 -- Test 1: Schemas exist
 select has_schema('public', 'public schema should exist');

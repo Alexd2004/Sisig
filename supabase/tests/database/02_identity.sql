@@ -1,7 +1,7 @@
 -- pgTAP tests for identity and role system
 
 begin;
-select plan(25);
+select plan(20);
 
 -- Test 1: Tables exist
 select has_table('public', 'profiles', 'profiles table exists');
@@ -52,11 +52,11 @@ select has_function('public', 'set_user_role', array['uuid', 'app_role']::name[]
 
 -- Test 6: Constraints
 select col_has_check('public', 'profiles', 'phone_e164', 'phone_e164 has E.164 check');
-select col_has_check('public', 'profiles', 'birthday_month', 'birthday_month has range check');
+select ok(exists (select 1 from pg_constraint where conrelid = 'public.profiles'::regclass and contype = 'c' and pg_get_constraintdef(oid) like '%birthday_month%'), 'birthday_month has range check');
 
 -- Test 7: Defaults
-select col_default_is('public', 'profiles', 'locale', "'en-CA'::text", 'locale defaults to en-CA');
-select col_default_is('public', 'user_roles', 'role', "'customer'::app_role", 'role defaults to customer');
+select col_default_is('public', 'profiles', 'locale', 'en-CA', 'locale defaults to en-CA');
+select col_default_is('public', 'user_roles', 'role', 'customer'::app_role, 'role defaults to customer');
 
 select * from finish();
 rollback;

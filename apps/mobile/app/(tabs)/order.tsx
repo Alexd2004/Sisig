@@ -1,4 +1,3 @@
-import React from 'react';
 import { View, Text, StyleSheet, ScrollView, FlatList } from 'react-native';
 import { Button } from '@sisig/ui';
 

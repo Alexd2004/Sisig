@@ -6,7 +6,8 @@
   "tasks": {
     "dev": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "dependsOn": ["^build"]
     },
     "build": {
       "outputs": [
@@ -29,10 +30,12 @@
       "cache": true
     },
     "typecheck": {
+      "dependsOn": ["^build"],
       "cache": true
     },
     "test": {
       "outputs": ["coverage/**"],
+      "dependsOn": ["^build"],
       "cache": true
     }
   }

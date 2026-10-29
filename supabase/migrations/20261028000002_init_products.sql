@@ -6,7 +6,7 @@ create table if not exists public.products (
   name text not null,
   description text,
   category text not null,
-  price integer not null comment 'Price in cents',
+  price integer not null,
   image_url text,
   is_available boolean not null default true,
   created_at timestamp with time zone not null default now(),

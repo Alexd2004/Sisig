@@ -1,6 +1,5 @@
-import React from 'react';
 import { Tabs } from 'expo-router';
-import { TabBarIcon } from 'src/components/TabBarIcon';
+import { TabBarIcon } from '../../src/components/TabBarIcon';
 
 export default function TabsLayout(): JSX.Element {
   return (
@@ -32,7 +31,7 @@ export default function TabsLayout(): JSX.Element {
         options={{
           title: 'Order',
           headerTitle: 'Place an Order',
-          tabBarIcon: ({ color }) => <TabBarIcon name="shopping-cart" color={color} />,
+          tabBarIcon: ({ color }) => <TabBarIcon name="cart" color={color} />,
           tabBarAccessibilityLabel: 'Order tab',
         }}
       />

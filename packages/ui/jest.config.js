@@ -1,20 +1,13 @@
 module.exports = {
-  preset: 'react-native',
+  ...require('jest-expo/jest-preset'),
   testEnvironment: 'node',
-  transform: {
-    '^.+\\.tsx?$': 'ts-jest',
-  },
-  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
-  testMatch: ['**/__tests__/**/*.(test|spec).(ts|tsx|js)'],
+  testMatch: ['**/*.(test|spec).(ts|tsx)'],
+  testPathIgnorePatterns: ['/node_modules/', '/dist/'],
+  transformIgnorePatterns: [
+    'node_modules/(?!(\\.pnpm|(jest-)?react-native|@react-native|@testing-library|expo[^/]*|@expo/[^/]*)/)',
+  ],
   collectCoverageFrom: [
     'src/**/*.{ts,tsx}',
     '!src/**/*.d.ts',
   ],
-  globals: {
-    'ts-jest': {
-      tsconfig: {
-        jsx: 'react-native',
-      },
-    },
-  },
 };

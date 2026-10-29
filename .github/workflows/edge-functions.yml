@@ -25,10 +25,10 @@ jobs:
           deno-version: v2.x
 
       - name: Run Deno tests
-        run: deno test --allow-all supabase/functions
+        run: deno test --allow-all --no-config supabase/functions
 
       - name: Format check
-        run: deno fmt --check supabase/functions
+        run: deno fmt --check --no-config supabase/functions
 
       - name: Lint
-        run: deno lint supabase/functions
+        run: deno lint --no-config supabase/functions
