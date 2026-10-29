@@ -145,6 +145,7 @@ const unused = _;
 Sample tests are included in:
 
 - `packages/ui/src/Button.test.tsx` — Component test
+- `packages/ui/src/theme/contrast.test.ts` — WCAG AA contrast test for every semantic colour pair
 - `packages/api/src/utils.test.ts` — Unit test
 - `apps/mobile/app/index.test.tsx` — Screen test
 
@@ -154,6 +155,24 @@ Run tests:
 pnpm test               # All tests
 pnpm test --watch      # Watch mode
 ```
+
+## Theme and Brand Tokens (THEME-01)
+
+- **Brand values** live in one file: `packages/ui/src/theme/brand.ts`. Components never use raw hex colours. They use semantic names through `@sisig/ui` (`useAppColors`, `useThemedStyles`, `Text`, `TextInput`). `apps/mobile/src/no-raw-colors.test.ts` and `packages/ui/src/no-raw-colors.test.ts` fail if a component contains a hex literal.
+- **Light and dark** follow the OS setting (`userInterfaceStyle: "automatic"` in `apps/mobile/app.json`). There is no in-app override in v1.
+- **Font scaling** is capped at `FONT_SCALE_CAP` (1.5x) in `Text` and `TextInput`.
+- **Contrast:** `packages/ui/src/theme/contrast.test.ts` checks WCAG AA (4.5:1) for every foreground/background pair in both themes. It runs under `pnpm test` in CI.
+- **Rebrand:** edit `brand.ts`, then run `pnpm test`. The contrast test catches any pair that falls below AA. See `docs/ARCHITECTURE.md` ("Rebrand in 10 Minutes").
+
+### Pending client assets
+
+The values below are placeholders until the client supplies final assets. Do not treat them as brand decisions.
+
+| Asset | Current placeholder | Where to change |
+|---|---|---|
+| Brand colour palette (light and dark) | Placeholder palette tuned to pass WCAG AA. It is not the brand palette. | `packages/ui/src/theme/brand.ts` (`palette`, `lightTheme`, `darkTheme`) |
+| Brand fonts (body and heading) | Inter from Google Fonts via `@expo-google-fonts/inter` (Regular 400 and SemiBold 600). Package metadata lists `MIT AND OFL-1.1`. Confirm the licence before any release. | `brandFonts` in `brand.ts`; the `expo-font` plugin entry in `apps/mobile/app.json`; the imports in `apps/mobile/app/_layout.tsx` |
+| Licensed font files and final brand fonts | Not yet received from the client | Client input. Replace the placeholder fonts when they arrive. |
 
 ## Acceptance Criteria (PLAT-01)
 

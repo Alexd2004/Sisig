@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
-import { Button } from '@sisig/ui';
+import { Button, Text, useThemedStyles, type AppColors } from '@sisig/ui';
 import { useSession } from '../session/session';
 
 interface SignInRequiredProps {
@@ -11,6 +11,31 @@ interface SignInRequiredProps {
   returnTo: string;
   children: ReactNode;
 }
+
+const createStyles = (c: AppColors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: c.background,
+      padding: 24,
+    },
+    title: {
+      fontSize: 24,
+      fontWeight: 'bold',
+      marginBottom: 12,
+    },
+    prompt: {
+      fontSize: 15,
+      color: c.foregroundMuted,
+      textAlign: 'center',
+      marginBottom: 24,
+    },
+    button: {
+      paddingHorizontal: 32,
+    },
+  });
 
 /**
  * Renders children for signed-in customers. Guests see a sign-in prompt
@@ -23,6 +48,7 @@ export function SignInRequired({
   children,
 }: SignInRequiredProps): JSX.Element {
   const { status } = useSession();
+  const styles = useThemedStyles(createStyles);
 
   if (status === 'signed-in') {
     return <>{children}</>;
@@ -40,27 +66,3 @@ export function SignInRequired({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f5f5f5',
-    padding: 24,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 12,
-  },
-  prompt: {
-    fontSize: 15,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  button: {
-    paddingHorizontal: 32,
-  },
-});

@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { Text } from 'react-native';
+import { TamaguiProvider, Theme, tamaguiConfig } from '@sisig/ui';
 import { SessionProvider, type SessionSource } from '../session/session';
 import { SignInRequired } from './SignInRequired';
 
@@ -18,11 +19,15 @@ function sourceWithStatus(status: 'signed-in' | 'signed-out'): SessionSource {
 
 function renderGate(status: 'signed-in' | 'signed-out'): void {
   render(
-    <SessionProvider source={sourceWithStatus(status)}>
-      <SignInRequired title="My Points" prompt="Sign in to see your points." returnTo="/rewards">
-        <Text>points balance</Text>
-      </SignInRequired>
-    </SessionProvider>
+    <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
+      <Theme name="light">
+        <SessionProvider source={sourceWithStatus(status)}>
+          <SignInRequired title="My Points" prompt="Sign in to see your points." returnTo="/rewards">
+            <Text>points balance</Text>
+          </SignInRequired>
+        </SessionProvider>
+      </Theme>
+    </TamaguiProvider>
   );
 }
 

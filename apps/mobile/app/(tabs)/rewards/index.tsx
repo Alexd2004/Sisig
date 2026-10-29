@@ -1,8 +1,90 @@
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, ScrollView, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
-import { Button } from '@sisig/ui';
+import { Button, Text, useThemedStyles, type AppColors } from '@sisig/ui';
+
+const createStyles = (c: AppColors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: c.background,
+    },
+    pointsCard: {
+      backgroundColor: c.primary,
+      margin: 16,
+      padding: 24,
+      borderRadius: 12,
+      alignItems: 'center',
+    },
+    pointsLabel: {
+      color: c.primaryForeground,
+      fontSize: 14,
+      marginBottom: 8,
+    },
+    pointsAmount: {
+      color: c.primaryForeground,
+      fontSize: 48,
+      fontWeight: 'bold',
+      marginBottom: 8,
+    },
+    pointsSubtext: {
+      // No opacity: a faded foreground drops below WCAG AA on the primary fill.
+      color: c.primaryForeground,
+      fontSize: 12,
+    },
+    section: {
+      paddingHorizontal: 16,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      marginBottom: 12,
+    },
+    rewardCard: {
+      backgroundColor: c.surface,
+      padding: 16,
+      borderRadius: 8,
+      marginBottom: 12,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    rewardInfo: {
+      flex: 1,
+    },
+    rewardName: {
+      fontSize: 16,
+      fontWeight: '600',
+      marginBottom: 4,
+    },
+    rewardCost: {
+      fontSize: 14,
+      color: c.foregroundMuted,
+    },
+    infoCard: {
+      backgroundColor: c.surface,
+      margin: 16,
+      padding: 16,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    infoTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      marginBottom: 8,
+    },
+    infoText: {
+      fontSize: 13,
+      color: c.foregroundMuted,
+      lineHeight: 20,
+    },
+  });
 
 export default function RewardsScreen(): JSX.Element {
+  const styles = useThemedStyles(createStyles);
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.pointsCard}>
@@ -42,90 +124,10 @@ export default function RewardsScreen(): JSX.Element {
       <View style={styles.infoCard}>
         <Text style={styles.infoTitle}>How It Works</Text>
         <Text style={styles.infoText}>
-          • Earn 1 point per $1 spent{'\n'}
-          • Redeem for free items and discounts{'\n'}
-          • Points never expire
+          • Earn 1 point per $1 spent{'\n'}• Redeem for free items and discounts{'\n'}• Points never
+          expire
         </Text>
       </View>
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  pointsCard: {
-    backgroundColor: '#007AFF',
-    margin: 16,
-    padding: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  pointsLabel: {
-    color: '#ffffff',
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  pointsAmount: {
-    color: '#ffffff',
-    fontSize: 48,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  pointsSubtext: {
-    color: '#ffffff',
-    fontSize: 12,
-    opacity: 0.8,
-  },
-  section: {
-    paddingHorizontal: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  rewardCard: {
-    backgroundColor: '#ffffff',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  rewardInfo: {
-    flex: 1,
-  },
-  rewardName: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  rewardCost: {
-    fontSize: 14,
-    color: '#666',
-  },
-  infoCard: {
-    backgroundColor: '#ffffff',
-    margin: 16,
-    padding: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  infoTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  infoText: {
-    fontSize: 13,
-    color: '#666',
-    lineHeight: 20,
-  },
-});

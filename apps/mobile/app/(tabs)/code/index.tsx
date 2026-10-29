@@ -1,9 +1,91 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { Button } from '@sisig/ui';
+import { View, ScrollView, StyleSheet } from 'react-native';
+import { Button, Text, useThemedStyles, type AppColors } from '@sisig/ui';
+
+const createStyles = (c: AppColors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: c.background,
+    },
+    section: {
+      padding: 16,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      marginBottom: 8,
+    },
+    description: {
+      fontSize: 14,
+      color: c.foregroundMuted,
+    },
+    codeCard: {
+      backgroundColor: c.surface,
+      marginHorizontal: 16,
+      marginVertical: 12,
+      padding: 24,
+      borderRadius: 12,
+      alignItems: 'center',
+      borderWidth: 2,
+      borderColor: c.primary,
+    },
+    qrPlaceholder: {
+      width: 200,
+      height: 200,
+      backgroundColor: c.background,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 16,
+    },
+    qrText: {
+      fontSize: 32,
+      marginBottom: 8,
+    },
+    qrSubtext: {
+      fontSize: 12,
+      color: c.foregroundMuted,
+    },
+    codeText: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: c.primary,
+      letterSpacing: 2,
+    },
+    lockedCard: {
+      backgroundColor: c.surface,
+      marginHorizontal: 16,
+      marginVertical: 12,
+      padding: 24,
+      borderRadius: 12,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    lockedText: {
+      fontSize: 16,
+      marginBottom: 16,
+    },
+    signInButton: {
+      width: '80%',
+    },
+    featureList: {
+      marginTop: 12,
+    },
+    feature: {
+      fontSize: 14,
+      marginVertical: 6,
+    },
+    toggleButton: {
+      marginHorizontal: 16,
+      marginVertical: 24,
+    },
+  });
 
 export default function CodeScreen(): JSX.Element {
   const [showCode, setShowCode] = useState(false);
+  const styles = useThemedStyles(createStyles);
 
   return (
     <ScrollView style={styles.container}>
@@ -51,84 +133,3 @@ export default function CodeScreen(): JSX.Element {
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  section: {
-    padding: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  description: {
-    fontSize: 14,
-    color: '#666',
-  },
-  codeCard: {
-    backgroundColor: '#ffffff',
-    marginHorizontal: 16,
-    marginVertical: 12,
-    padding: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#007AFF',
-  },
-  qrPlaceholder: {
-    width: 200,
-    height: 200,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  qrText: {
-    fontSize: 32,
-    marginBottom: 8,
-  },
-  qrSubtext: {
-    fontSize: 12,
-    color: '#666',
-  },
-  codeText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#007AFF',
-    letterSpacing: 2,
-  },
-  lockedCard: {
-    backgroundColor: '#ffffff',
-    marginHorizontal: 16,
-    marginVertical: 12,
-    padding: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  lockedText: {
-    fontSize: 16,
-    marginBottom: 16,
-  },
-  signInButton: {
-    width: '80%',
-  },
-  featureList: {
-    marginTop: 12,
-  },
-  feature: {
-    fontSize: 14,
-    color: '#333',
-    marginVertical: 6,
-  },
-  toggleButton: {
-    marginHorizontal: 16,
-    marginVertical: 24,
-  },
-});

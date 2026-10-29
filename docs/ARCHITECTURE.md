@@ -543,12 +543,16 @@ const dark = {
 
 ### Tamagui Configuration
 
-**File:** `packages/ui/tamagui.config.ts`
+**Files:**
+- `packages/ui/src/theme/brand.ts`: the brand token file (palette, semantic light/dark themes, font names, font scale cap)
+- `packages/ui/src/tamagui.config.ts`: `createTamagui` composition, which reads only from the brand file
+
+Tamagui 1.x is pinned because Tamagui 2.x and later require React 19; the app runs React 18.2.
 
 **Structure:**
 ```typescript
 const config = createTamagui({
-  tokens,           // Primitive values
+  tokens,           // Primitive values (palette, size, space, radius, zIndex)
   themes: {
     light,          // Semantic mapping for light mode
     dark,           // Semantic mapping for dark mode
@@ -571,16 +575,12 @@ const config = createTamagui({
 - Users with vision impairments set larger system fonts
 - 1.5x cap prevents layouts from breaking
 
-**Implementation:**
-```typescript
-const maxFontSizeMultiplier = 1.5;
+**Implementation:** `Text` and `TextInput` from `@sisig/ui` set `maxFontSizeMultiplier` to `FONT_SCALE_CAP` (1.5) and clamp any larger caller value. App code must use these wrappers, not the react-native components.
 
-<Text
-  style={{
-    maxFontSizeMultiplier, // Capped scaling
-    fontSize: 16,
-  }}
->
+```typescript
+import { Text } from '@sisig/ui';
+
+<Text style={{ fontSize: 16 }}>
   This text scales with OS setting, up to 1.5x
 </Text>
 ```
@@ -594,86 +594,56 @@ const maxFontSizeMultiplier = 1.5;
 - Consistent with platform conventions
 - Users expect app to follow system setting
 
-**Implementation:**
-```typescript
-const colorScheme = useColorScheme();
-// Tamagui automatically switches colors based on colorScheme
-// No component code changes needed
-```
+**Implementation:** `apps/mobile/src/components/AppThemeProvider.tsx` reads `useColorScheme()` and sets the Tamagui theme and status bar style. `app.json` sets `userInterfaceStyle: "automatic"`.
 
 ### Placeholder Assets
 
 **Decision:** Use Google Fonts (Inter) and generic brand colors until client provides assets.
 
 **Pending Assets:**
-- [ ] Licensed brand fonts (replace `createInterFont()`)
-- [ ] Final brand color palette (replace `primaryLight`, `successLight`, etc.)
+- [ ] Licensed brand fonts (replace the Inter placeholders in `brandFonts` and the `expo-font` plugin entry in `apps/mobile/app.json`)
+- [ ] Final brand color palette (replace the values in `packages/ui/src/theme/brand.ts`)
 - [ ] Logo and app icon
 
-**Status:** Listed in README under "Pending Client Assets"
+**Status:** Listed in README under "Pending client assets"
 
 ### Type Safety
 
 **Declaration:**
 ```typescript
-declare module 'tamagui' {
+declare module '@tamagui/core' {
   interface TamaguiCustomConfig extends Conf {}
 }
 ```
 
-**Usage:**
-```typescript
-import { styled } from 'tamagui';
-
-const StyledButton = styled(Pressable, {
-  backgroundColor: '$primary',
-  color: '$primaryForeground',
-});
-```
+**Usage:** components read semantic colours with `useAppColors()` or `useThemedStyles()` from `@sisig/ui`, never raw hex values. A test in `apps/mobile/src/no-raw-colors.test.ts` and `packages/ui/src/no-raw-colors.test.ts` fails if a component file contains a hex literal.
 
 ### Contrast Testing
 
 **Decision:** Automated contrast checker runs in CI.
 
-**Tool:** Custom or axe-core check
-**Threshold:** WCAG AA (4.5:1 for text, 3:1 for large text)
+**Tool:** Custom WCAG 2.x contrast calculation (`packages/ui/src/theme/contrast.ts`)
+**Threshold:** WCAG AA 4.5:1 for every foreground/background pair in both themes (stricter than the 3:1 large-text rule)
 
-**CI Script (pseudocode):**
-```bash
-# Run contrast tests against light and dark themes
-pnpm test:contrast
-
-# Fail if any pair is below AA
-if [ $? -ne 0 ]; then
-  echo "WCAG AA contrast failure detected"
-  exit 1
-fi
-```
+**Where it runs:** `packages/ui/src/theme/contrast.test.ts` runs under `pnpm test`, which the CI "Unit tests" step executes on every PR.
 
 ### Rebrand in 10 Minutes
 
 **How to Swap Brand:**
 
-1. Update `packages/ui/tamagui.config.ts`:
-```typescript
-const tokens = createTokens({
-  color: {
-    primaryLight: '#YOUR_BRAND_COLOR',
-    primaryDark: '#YOUR_BRAND_DARK',
-    // ... other colors
-  },
-});
-```
+1. Update the values in `packages/ui/src/theme/brand.ts` (palette, `lightTheme`, `darkTheme`).
+   Run `pnpm test`: the contrast test fails if any pair falls below AA.
 
-2. Replace font files in `packages/ui/fonts/`
+2. Replace the Inter placeholder fonts: update `brandFonts` in the same file, the font files listed under the `expo-font` plugin in `apps/mobile/app.json`, and the imports in `apps/mobile/app/_layout.tsx`.
 
-3. Rebuild:
+3. Rebuild and check:
 ```bash
 pnpm -F @sisig/ui build
-pnpm build
+pnpm test
+pnpm -F @sisig/mobile typecheck
 ```
 
-4. All screens automatically use new colors (no component changes needed)
+4. All screens use the new colours with no component changes.
 
 ---
 
@@ -710,7 +680,7 @@ React Native Component
 ### Theme Configuration → All Components
 
 ```
-tamagui.config.ts (single source of truth)
+packages/ui/src/theme/brand.ts (single source of truth)
        ↓
   All @sisig/ui components
        ↓
@@ -854,7 +824,7 @@ pnpm db:types
 ### Design Phase Complete
 
 - [ ] Client brand assets arrive
-- [ ] Swap `tamagui.config.ts` colors and fonts
+- [ ] Swap `packages/ui/src/theme/brand.ts` colors and fonts
 - [ ] Rebuild and deploy (no component changes)
 
 ---

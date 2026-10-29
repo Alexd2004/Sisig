@@ -1,5 +1,7 @@
 import React from 'react';
-import { Pressable, Text, StyleSheet, ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, ViewStyle } from 'react-native';
+import { Text } from './Text';
+import { useAppColors } from './theme/hooks';
 
 interface ButtonProps {
   onPress: () => void;
@@ -7,22 +9,30 @@ interface ButtonProps {
   style?: ViewStyle;
 }
 
-export const Button: React.FC<ButtonProps> = ({ onPress, title, style }) => (
-  <Pressable style={[styles.button, style]} onPress={onPress}>
-    <Text style={styles.text}>{title}</Text>
-  </Pressable>
-);
+export const Button: React.FC<ButtonProps> = ({ onPress, title, style }) => {
+  const colors = useAppColors();
+  return (
+    <Pressable
+      style={({ pressed }) => [
+        styles.button,
+        { backgroundColor: pressed ? colors.primaryPressed : colors.primary },
+        style,
+      ]}
+      onPress={onPress}
+    >
+      <Text style={[styles.text, { color: colors.primaryForeground }]}>{title}</Text>
+    </Pressable>
+  );
+};
 
 const styles = StyleSheet.create({
   button: {
-    backgroundColor: '#007AFF',
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,
     alignItems: 'center',
   },
   text: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
   },

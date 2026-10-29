@@ -1,18 +1,22 @@
 import { Tabs } from 'expo-router';
+import { useAppColors } from '@sisig/ui';
 import { TabBarIcon } from '../../src/components/TabBarIcon';
 import { popTabStackToRoot } from '../../src/navigation/pop-to-root';
 
 export default function TabsLayout(): JSX.Element {
+  const colors = useAppColors();
+
   return (
     <Tabs
       screenOptions={{
         // Each tab renders its own Stack, which draws the header.
         headerShown: false,
-        tabBarActiveTintColor: '#007AFF',
-        tabBarInactiveTintColor: '#999999',
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.foregroundMuted,
         tabBarStyle: {
+          backgroundColor: colors.surface,
           borderTopWidth: 1,
-          borderTopColor: '#e0e0e0',
+          borderTopColor: colors.border,
           paddingBottom: 8,
           paddingTop: 8,
           height: 60,

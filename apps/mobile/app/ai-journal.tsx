@@ -1,13 +1,6 @@
 import { useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  ScrollView,
-  StyleSheet,
-  ActivityIndicator,
-} from 'react-native';
-import { Button } from '@sisig/ui';
+import { View, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
+import { Button, Text, TextInput, useAppColors, useThemedStyles, type AppColors } from '@sisig/ui';
 
 interface JournalEntry {
   id: string;
@@ -16,10 +9,101 @@ interface JournalEntry {
   timestamp: number;
 }
 
+const createStyles = (c: AppColors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: c.background,
+    },
+    section: {
+      padding: 16,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      marginBottom: 12,
+    },
+    textInput: {
+      backgroundColor: c.surface,
+      borderRadius: 8,
+      padding: 12,
+      fontSize: 14,
+      minHeight: 150,
+      textAlignVertical: 'top',
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    buttonContainer: {
+      flexDirection: 'row',
+      paddingHorizontal: 16,
+      gap: 12,
+      marginBottom: 16,
+    },
+    button: {
+      flex: 1,
+    },
+    loadingContainer: {
+      padding: 32,
+      alignItems: 'center',
+    },
+    loadingText: {
+      marginTop: 12,
+      fontSize: 14,
+      color: c.foregroundMuted,
+    },
+    entryCard: {
+      backgroundColor: c.surface,
+      borderRadius: 8,
+      padding: 12,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    entryDate: {
+      fontSize: 12,
+      color: c.placeholder,
+      marginBottom: 8,
+    },
+    entryContent: {
+      fontSize: 14,
+      lineHeight: 20,
+      marginBottom: 12,
+    },
+    insightsContainer: {
+      backgroundColor: c.surfaceMuted,
+      borderLeftWidth: 3,
+      borderLeftColor: c.primary,
+      paddingLeft: 12,
+      paddingVertical: 8,
+    },
+    insightsTitle: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: c.primary,
+      marginBottom: 6,
+    },
+    insightsText: {
+      fontSize: 13,
+      lineHeight: 18,
+      color: c.foregroundMuted,
+    },
+    emptyState: {
+      padding: 32,
+      alignItems: 'center',
+    },
+    emptyStateText: {
+      fontSize: 16,
+      color: c.placeholder,
+      textAlign: 'center',
+    },
+  });
+
 export default function AIJournalScreen(): JSX.Element {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [input, setInput] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
+  const colors = useAppColors();
+  const styles = useThemedStyles(createStyles);
 
   const handleSaveEntry = async (): Promise<void> => {
     if (!input.trim()) return;
@@ -82,26 +166,17 @@ const insights = await client.generateText(
           onChangeText={setInput}
           multiline
           editable={!loading}
-          placeholderTextColor="#999"
         />
       </View>
 
       <View style={styles.buttonContainer}>
-        <Button
-          title="Save & Analyze"
-          onPress={handleSaveEntry}
-          style={styles.button}
-        />
-        <Button
-          title="Clear"
-          onPress={handleClear}
-          style={styles.button}
-        />
+        <Button title="Save & Analyze" onPress={handleSaveEntry} style={styles.button} />
+        <Button title="Clear" onPress={handleClear} style={styles.button} />
       </View>
 
       {loading && (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
+          <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Analyzing your thoughts...</Text>
         </View>
       )}
@@ -134,92 +209,3 @@ const insights = await client.generateText(
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  section: {
-    padding: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  textInput: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 14,
-    minHeight: 150,
-    textAlignVertical: 'top',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  buttonContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    gap: 12,
-    marginBottom: 16,
-  },
-  button: {
-    flex: 1,
-  },
-  loadingContainer: {
-    padding: 32,
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: '#666',
-  },
-  entryCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  entryDate: {
-    fontSize: 12,
-    color: '#999',
-    marginBottom: 8,
-  },
-  entryContent: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 12,
-    color: '#333',
-  },
-  insightsContainer: {
-    backgroundColor: '#f9f9f9',
-    borderLeftWidth: 3,
-    borderLeftColor: '#007AFF',
-    paddingLeft: 12,
-    paddingVertical: 8,
-  },
-  insightsTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#007AFF',
-    marginBottom: 6,
-  },
-  insightsText: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: '#555',
-  },
-  emptyState: {
-    padding: 32,
-    alignItems: 'center',
-  },
-  emptyStateText: {
-    fontSize: 16,
-    color: '#999',
-    textAlign: 'center',
-  },
-});
