@@ -161,6 +161,16 @@ describe('nativeSessionStorage', () => {
       expect(await nativeSessionStorage.getItem('sb-auth-token')).toBeNull();
     });
 
+    it('still removes the sealed entries when deleting the key rejects', async () => {
+      const SecureStore = jest.requireMock('expo-secure-store');
+      await nativeSessionStorage.setItem('sb-auth-token', SESSION_JSON);
+      SecureStore.deleteItemAsync.mockRejectedValueOnce(new Error('keychain unavailable'));
+
+      await expect(clearSessionStorage()).rejects.toThrow('keychain unavailable');
+
+      expect(await AsyncStorage.getItem('sisig.secure.v1:sb-auth-token')).toBeNull();
+    });
+
     it('leaves unrelated AsyncStorage keys alone', async () => {
       await AsyncStorage.setItem('app:onboarding-seen', 'true');
       await nativeSessionStorage.setItem('sb-auth-token', SESSION_JSON);

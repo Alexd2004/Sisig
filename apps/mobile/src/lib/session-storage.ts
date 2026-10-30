@@ -164,11 +164,25 @@ export const nativeSessionStorage: StorageAdapter = {
 
 /**
  * Purge all encrypted session data (called on logout).
- * The AES key is deleted first: once it is gone, any ciphertext left behind is unreadable.
+ * Removing the sealed entries and deleting the AES key are independent. Either one alone leaves
+ * the session unreadable or gone, so each runs even if the other fails, and the first failure is
+ * rethrown.
  */
 export async function clearSessionStorage(): Promise<void> {
-  await SecureStore.deleteItemAsync(KEY_NAME, SECURE_OPTIONS);
+  const results = await Promise.allSettled([removeSealedEntries(), deleteKey()]);
+  const failure = results.find(
+    (result): result is PromiseRejectedResult => result.status === 'rejected'
+  );
+  if (failure) {
+    throw failure.reason;
+  }
+}
 
+async function deleteKey(): Promise<void> {
+  await SecureStore.deleteItemAsync(KEY_NAME, SECURE_OPTIONS);
+}
+
+async function removeSealedEntries(): Promise<void> {
   const allKeys = await AsyncStorage.getAllKeys();
   const entries = allKeys.filter(
     (key) => key.startsWith(ENTRY_PREFIX) || LEGACY_ENTRY_KEYS.includes(key)
