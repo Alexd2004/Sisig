@@ -202,4 +202,34 @@ describe('signOutAndPurge', () => {
     expect(mockKeystore.has('sisig_session_key')).toBe(false);
     expect(queryClient.getQueryData(keys.orders.list())).toBeUndefined();
   });
+
+  it('still runs the persisted purge steps when clearing the in-memory cache throws', async () => {
+    const SecureStore = jest.requireMock('expo-secure-store');
+    SecureStore.deleteItemAsync.mockClear();
+    await AsyncStorage.setItem('sisig.query-cache', '{"clientState":{}}');
+    jest.spyOn(queryClient, 'clear').mockImplementationOnce(() => {
+      throw new Error('cache busy');
+    });
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await expect(
+      signOutAndPurge(makeSupabase(jest.fn(async () => ({ error: null }))), queryClient)
+    ).resolves.toBeUndefined();
+
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledTimes(1);
+    expect(await AsyncStorage.getItem('sisig.query-cache')).toBeNull();
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ message: 'cache busy' })
+    );
+    errorSpy.mockRestore();
+  });
+
+  it('rethrows a non-Error sign-out failure as an Error', async () => {
+    const signOut = jest.fn(async () => ({ error: 'token expired' }));
+    const failure = signOutAndPurge(makeSupabase(signOut), queryClient);
+
+    await expect(failure).rejects.toBeInstanceOf(Error);
+    await expect(failure).rejects.toThrow('token expired');
+  });
 });
