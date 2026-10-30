@@ -64,7 +64,7 @@ async function loadKey(): Promise<Uint8Array | null> {
   }
 }
 
-async function getOrCreateKey(): Promise<Uint8Array> {
+async function loadOrCreateKey(): Promise<Uint8Array> {
   const existing = await loadKey();
   if (existing) {
     return existing;
@@ -72,6 +72,24 @@ async function getOrCreateKey(): Promise<Uint8Array> {
   const key = Crypto.getRandomBytes(KEY_BYTES);
   await SecureStore.setItemAsync(KEY_NAME, bytesToHex(key), SECURE_OPTIONS);
   return key;
+}
+
+/** The key creation in progress, shared by concurrent callers. Cleared once it settles. */
+let pendingKey: Promise<Uint8Array> | null = null;
+
+/**
+ * Returns the AES key, creating it on first use. Concurrent callers share one promise, so two
+ * first writes cannot each create a key: the second would overwrite the first and leave its
+ * ciphertext unreadable. The promise is dropped when it settles, so a failed creation is retried
+ * by the next caller, and no key is held in memory after its keystore entry is gone.
+ */
+function getOrCreateKey(): Promise<Uint8Array> {
+  if (!pendingKey) {
+    pendingKey = loadOrCreateKey().finally(() => {
+      pendingKey = null;
+    });
+  }
+  return pendingKey;
 }
 
 async function seal(plaintext: string): Promise<string> {
@@ -146,11 +164,25 @@ export const nativeSessionStorage: StorageAdapter = {
 
 /**
  * Purge all encrypted session data (called on logout).
- * The AES key is deleted first: once it is gone, any ciphertext left behind is unreadable.
+ * Removing the sealed entries and deleting the AES key are independent. Either one alone leaves
+ * the session unreadable or gone, so each runs even if the other fails, and the first failure is
+ * rethrown.
  */
 export async function clearSessionStorage(): Promise<void> {
-  await SecureStore.deleteItemAsync(KEY_NAME, SECURE_OPTIONS);
+  const results = await Promise.allSettled([removeSealedEntries(), deleteKey()]);
+  const failure = results.find(
+    (result): result is PromiseRejectedResult => result.status === 'rejected'
+  );
+  if (failure) {
+    throw failure.reason;
+  }
+}
 
+async function deleteKey(): Promise<void> {
+  await SecureStore.deleteItemAsync(KEY_NAME, SECURE_OPTIONS);
+}
+
+async function removeSealedEntries(): Promise<void> {
   const allKeys = await AsyncStorage.getAllKeys();
   const entries = allKeys.filter(
     (key) => key.startsWith(ENTRY_PREFIX) || LEGACY_ENTRY_KEYS.includes(key)
