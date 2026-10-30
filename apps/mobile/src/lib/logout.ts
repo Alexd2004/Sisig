@@ -9,7 +9,7 @@ import { clearSessionStorage } from './session-storage';
  *
  * The in-memory cache is cleared before the persisted steps, and each persisted step runs
  * even if an earlier one fails. A purge failure is logged, not thrown. A sign-out failure is
- * logged and rethrown once the purge has run, so a purge error never replaces it.
+ * rethrown once the purge has run, so a purge error never replaces it. The caller logs it.
  */
 export async function signOutAndPurge(
   client: SupabaseClient,
@@ -36,7 +36,6 @@ export async function signOutAndPurge(
   await purgeStep('persisted query cache', clearPersistedQueries);
 
   if (signOutFailed) {
-    console.error('Sign out failed:', signOutError);
     throw signOutError;
   }
 }

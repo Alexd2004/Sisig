@@ -77,7 +77,6 @@ describe('signOutAndPurge', () => {
   it('still purges everything when sign-out fails, and rethrows the error', async () => {
     await nativeSessionStorage.setItem('sb-auth-token', USER_A_SESSION);
     queryClient.setQueryData(keys.orders.list(), [{ id: 'user-a-order' }]);
-    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
     const signOut = jest.fn(async () => {
       throw new Error('network down');
     });
@@ -89,7 +88,6 @@ describe('signOutAndPurge', () => {
     expect(await nativeSessionStorage.getItem('sb-auth-token')).toBeNull();
     expect(mockKeystore.has('sisig_session_key')).toBe(false);
     expect(queryClient.getQueryData(keys.orders.list())).toBeUndefined();
-    errorSpy.mockRestore();
   });
 
   it('removes the persisted cache from disk', async () => {
@@ -191,24 +189,17 @@ describe('signOutAndPurge', () => {
     errorSpy.mockRestore();
   });
 
-  it('reports a sign-out error that auth-js returns, and still purges everything', async () => {
+  it('rethrows a sign-out error that auth-js returns, and still purges everything', async () => {
     await nativeSessionStorage.setItem('sb-auth-token', USER_A_SESSION);
     queryClient.setQueryData(keys.orders.list(), [{ id: 'user-a-order' }]);
-    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
     const signOut = jest.fn(async () => ({ error: new Error('network down') }));
 
     await expect(signOutAndPurge(makeSupabase(signOut), queryClient)).rejects.toThrow(
       'network down'
     );
 
-    expect(errorSpy).toHaveBeenCalledWith(
-      'Sign out failed:',
-      expect.objectContaining({ message: 'network down' })
-    );
     expect(await nativeSessionStorage.getItem('sb-auth-token')).toBeNull();
     expect(mockKeystore.has('sisig_session_key')).toBe(false);
     expect(queryClient.getQueryData(keys.orders.list())).toBeUndefined();
-
-    errorSpy.mockRestore();
   });
 });
