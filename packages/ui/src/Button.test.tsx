@@ -43,7 +43,8 @@ describe('Button', () => {
 
   it('is exposed to assistive tech as a button labelled by its title', () => {
     const { getByRole } = renderWithTheme(<Button title="Press me" onPress={jest.fn()} />);
-    expect(getByRole('button', { name: 'Press me' })).toBeTruthy();
+    expect(getByRole('button', { name: 'Press me' }).props.accessibilityRole).toBe('button');
+    expect(getByRole('button', { name: 'Press me' }).props.accessibilityLabel).toBe('Press me');
   });
 
   it('uses accessibilityLabel instead of the title when provided', () => {
@@ -55,7 +56,9 @@ describe('Button', () => {
 
   it('exposes the enabled state to assistive tech by default', () => {
     const { getByRole } = renderWithTheme(<Button title="Press me" onPress={jest.fn()} />);
-    expect(getByRole('button', { name: 'Press me', disabled: false })).toBeTruthy();
+    expect(getByRole('button', { name: 'Press me' }).props.accessibilityState).toMatchObject({
+      disabled: false,
+    });
   });
 
   it('exposes the disabled state to assistive tech when disabled', () => {

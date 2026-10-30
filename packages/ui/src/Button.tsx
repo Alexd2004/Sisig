@@ -29,7 +29,6 @@ export const Button: React.FC<ButtonProps> = ({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? title}
       accessibilityHint={accessibilityHint}
-      accessibilityState={{ disabled }}
       disabled={disabled}
       style={({ pressed }) => [
         styles.button,
