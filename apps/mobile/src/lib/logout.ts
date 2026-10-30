@@ -9,7 +9,7 @@ import { clearSessionStorage } from './session-storage';
  *
  * The in-memory cache is cleared before the persisted steps, and each persisted step runs
  * even if an earlier one fails. A purge failure is logged, not thrown. A sign-out failure is
- * rethrown once the purge has run, so a purge error never replaces it.
+ * logged and rethrown once the purge has run, so a purge error never replaces it.
  */
 export async function signOutAndPurge(
   client: SupabaseClient,
@@ -19,8 +19,13 @@ export async function signOutAndPurge(
   let signOutError: unknown;
   try {
     await queryClient.cancelQueries();
-    // Local scope clears this device only and does not depend on the network.
-    await client.auth.signOut({ scope: 'local' });
+    // Scope 'local' still sends POST /logout?scope=local when a session exists. auth-js removes
+    // the local session even when that request fails, and reports the failure as { error }.
+    const { error } = await client.auth.signOut({ scope: 'local' });
+    if (error) {
+      signOutFailed = true;
+      signOutError = error;
+    }
   } catch (error) {
     signOutFailed = true;
     signOutError = error;
@@ -31,6 +36,7 @@ export async function signOutAndPurge(
   await purgeStep('persisted query cache', clearPersistedQueries);
 
   if (signOutFailed) {
+    console.error('Sign out failed:', signOutError);
     throw signOutError;
   }
 }
