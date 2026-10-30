@@ -50,6 +50,15 @@ jobs:
       - name: Check Expo dependencies
         run: pnpm -F @sisig/mobile exec expo install --check
 
+      # `expo install --check` only compares versions. The bundle step catches
+      # Metro resolution errors (missing entry point, undeclared or mis-pinned
+      # packages). @sisig/* resolve through dist/, so build their dependencies first.
+      - name: Build workspace dependencies of the mobile app
+        run: pnpm turbo run build --filter='@sisig/mobile^...'
+
+      - name: Bundle mobile app (Android export)
+        run: pnpm -F @sisig/mobile exec expo export --platform android --output-dir ../../.expo-export-check
+
   # Database migrations, RLS tests, and schema linting
   database:
     runs-on: ubuntu-latest
@@ -181,7 +190,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Both checks use git grep over tracked files under apps/ and packages/
+      # All checks use git grep over tracked files under apps/ and packages/
       # (client code, including apps/mobile/app). Exit codes: 0 = match (fail),
       # 1 = no match (pass), anything else = grep error (fail). The earlier
       # `if grep ...; then` form treated a grep error (a missing path such as
@@ -195,6 +204,20 @@ jobs:
           case "$rc" in
             0) echo "✗ Service-role key or JWT pattern found in client code"; exit 1 ;;
             1) echo "✓ No service-role key or JWT patterns in client code" ;;
+            *) echo "✗ git grep failed with exit code $rc"; exit 1 ;;
+          esac
+
+      # Anthropic keys look like sk-ant-<body>. Requiring 20+ body characters
+      # keeps the placeholders in the READMEs (sk-ant-...) from matching.
+      - name: Check for Anthropic API key pattern in client code
+        run: |
+          set +e
+          git grep -n -I -E -e "sk-ant-[A-Za-z0-9_-]{20,}" -- apps packages
+          rc=$?
+          set -e
+          case "$rc" in
+            0) echo "✗ Anthropic API key pattern found in client code"; exit 1 ;;
+            1) echo "✓ No Anthropic API key patterns in client code" ;;
             *) echo "✗ git grep failed with exit code $rc"; exit 1 ;;
           esac
 
