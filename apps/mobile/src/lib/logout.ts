@@ -39,7 +39,22 @@ export async function signOutAndPurge(
   await purgeStep('persisted query cache', clearPersistedQueries);
 
   if (signOutFailed) {
-    throw signOutError instanceof Error ? signOutError : new Error(String(signOutError));
+    throw toError(signOutError);
+  }
+}
+
+/** Wraps a non-Error sign-out failure in an Error whose message shows the value. */
+function toError(value: unknown): Error {
+  if (value instanceof Error) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    return new Error(value);
+  }
+  try {
+    return new Error(JSON.stringify(value) ?? 'Sign out failed');
+  } catch {
+    return new Error('Sign out failed');
   }
 }
 

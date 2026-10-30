@@ -232,4 +232,12 @@ describe('signOutAndPurge', () => {
     await expect(failure).rejects.toBeInstanceOf(Error);
     await expect(failure).rejects.toThrow('token expired');
   });
+
+  it('keeps the message of an object sign-out failure instead of "[object Object]"', async () => {
+    const signOut = jest.fn(async () => ({ error: { message: 'token expired' } }));
+
+    await expect(signOutAndPurge(makeSupabase(signOut), queryClient)).rejects.toThrow(
+      'token expired'
+    );
+  });
 });
