@@ -40,4 +40,45 @@ describe('Button', () => {
       color: darkTheme.primaryForeground,
     });
   });
+
+  it('is exposed to assistive tech as a button labelled by its title', () => {
+    const { getByRole } = renderWithTheme(<Button title="Press me" onPress={jest.fn()} />);
+    expect(getByRole('button', { name: 'Press me' }).props.accessibilityRole).toBe('button');
+    expect(getByRole('button', { name: 'Press me' }).props.accessibilityLabel).toBe('Press me');
+  });
+
+  it('uses accessibilityLabel instead of the title when provided', () => {
+    const { getByRole } = renderWithTheme(
+      <Button title="⇄" accessibilityLabel="Swap languages" onPress={jest.fn()} />
+    );
+    expect(getByRole('button', { name: 'Swap languages' })).toBeTruthy();
+  });
+
+  it('exposes the enabled state to assistive tech by default', () => {
+    const { getByRole } = renderWithTheme(<Button title="Press me" onPress={jest.fn()} />);
+    expect(getByRole('button', { name: 'Press me' }).props.accessibilityState).toMatchObject({
+      disabled: false,
+    });
+  });
+
+  it('exposes the disabled state to assistive tech when disabled', () => {
+    const { getByRole } = renderWithTheme(<Button title="Press me" disabled onPress={jest.fn()} />);
+    expect(getByRole('button', { name: 'Press me', disabled: true })).toBeTruthy();
+  });
+
+  it('does not call onPress while disabled', () => {
+    const onPress = jest.fn();
+    const { getByRole } = renderWithTheme(<Button title="Press me" disabled onPress={onPress} />);
+    fireEvent.press(getByRole('button', { name: 'Press me' }));
+    expect(onPress).not.toHaveBeenCalled();
+  });
+
+  it('passes accessibilityHint through to the button', () => {
+    const { getByRole } = renderWithTheme(
+      <Button title="Add" accessibilityHint="Adds one item to your order" onPress={jest.fn()} />
+    );
+    expect(getByRole('button', { name: 'Add' }).props.accessibilityHint).toBe(
+      'Adds one item to your order'
+    );
+  });
 });
