@@ -98,4 +98,91 @@ describe('signOutAndPurge', () => {
     expect(await queryPersister.restoreClient()).toBeUndefined();
     expect(await AsyncStorage.getItem('sisig.query-cache')).toBeNull();
   });
+
+  it('signs out, then clears the in-memory cache, then purges the persisted data', async () => {
+    const SecureStore = jest.requireMock('expo-secure-store');
+    SecureStore.deleteItemAsync.mockClear();
+    const signOut = jest.fn(async () => ({ error: null }));
+    const clearMemory = jest.spyOn(queryClient, 'clear');
+    const removePersisted = jest.spyOn(queryPersister, 'removeClient');
+
+    await signOutAndPurge(makeSupabase(signOut), queryClient);
+
+    const signedOutAt = signOut.mock.invocationCallOrder[0];
+    const memoryClearedAt = clearMemory.mock.invocationCallOrder[0];
+    const keyDeletedAt = SecureStore.deleteItemAsync.mock.invocationCallOrder[0];
+    const persistedClearedAt = removePersisted.mock.invocationCallOrder[0];
+    expect(signedOutAt).toBeLessThan(memoryClearedAt);
+    expect(memoryClearedAt).toBeLessThan(keyDeletedAt);
+    expect(keyDeletedAt).toBeLessThan(persistedClearedAt);
+
+    clearMemory.mockRestore();
+    removePersisted.mockRestore();
+  });
+
+  it('still clears the in-memory cache and the persisted cache when clearSessionStorage rejects', async () => {
+    const SecureStore = jest.requireMock('expo-secure-store');
+    SecureStore.deleteItemAsync.mockRejectedValueOnce(new Error('keychain unavailable'));
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    await AsyncStorage.setItem('sisig.query-cache', '{"clientState":{}}');
+    queryClient.setQueryData(keys.orders.list(), [{ id: 'user-a-order' }]);
+
+    // Sign-out succeeded, so the purge failure is logged and does not reject the call.
+    await expect(
+      signOutAndPurge(makeSupabase(jest.fn(async () => ({ error: null }))), queryClient)
+    ).resolves.toBeUndefined();
+
+    expect(queryClient.getQueryData(keys.orders.list())).toBeUndefined();
+    expect(queryClient.getQueryCache().getAll()).toEqual([]);
+    expect(await AsyncStorage.getItem('sisig.query-cache')).toBeNull();
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ message: 'keychain unavailable' })
+    );
+
+    errorSpy.mockRestore();
+  });
+
+  it('runs the other purge steps when clearPersistedQueries rejects', async () => {
+    const SecureStore = jest.requireMock('expo-secure-store');
+    SecureStore.deleteItemAsync.mockClear();
+    await nativeSessionStorage.setItem('sb-auth-token', USER_A_SESSION);
+    queryClient.setQueryData(keys.orders.list(), [{ id: 'user-a-order' }]);
+    const removePersisted = jest
+      .spyOn(queryPersister, 'removeClient')
+      .mockRejectedValueOnce(new Error('disk full'));
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await expect(
+      signOutAndPurge(makeSupabase(jest.fn(async () => ({ error: null }))), queryClient)
+    ).resolves.toBeUndefined();
+
+    expect(removePersisted).toHaveBeenCalledTimes(1);
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledTimes(1);
+    expect(await nativeSessionStorage.getItem('sb-auth-token')).toBeNull();
+    expect(mockKeystore.has('sisig_session_key')).toBe(false);
+    expect(queryClient.getQueryData(keys.orders.list())).toBeUndefined();
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ message: 'disk full' })
+    );
+
+    removePersisted.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it('rethrows the sign-out error, not a purge error, when both fail', async () => {
+    const SecureStore = jest.requireMock('expo-secure-store');
+    SecureStore.deleteItemAsync.mockRejectedValueOnce(new Error('keychain unavailable'));
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const signOut = jest.fn(async () => {
+      throw new Error('network down');
+    });
+
+    await expect(signOutAndPurge(makeSupabase(signOut), queryClient)).rejects.toThrow(
+      'network down'
+    );
+
+    errorSpy.mockRestore();
+  });
 });

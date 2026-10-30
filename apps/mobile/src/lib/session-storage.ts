@@ -64,7 +64,7 @@ async function loadKey(): Promise<Uint8Array | null> {
   }
 }
 
-async function getOrCreateKey(): Promise<Uint8Array> {
+async function loadOrCreateKey(): Promise<Uint8Array> {
   const existing = await loadKey();
   if (existing) {
     return existing;
@@ -72,6 +72,24 @@ async function getOrCreateKey(): Promise<Uint8Array> {
   const key = Crypto.getRandomBytes(KEY_BYTES);
   await SecureStore.setItemAsync(KEY_NAME, bytesToHex(key), SECURE_OPTIONS);
   return key;
+}
+
+/** The key creation in progress, shared by concurrent callers. Cleared once it settles. */
+let pendingKey: Promise<Uint8Array> | null = null;
+
+/**
+ * Returns the AES key, creating it on first use. Concurrent callers share one promise, so two
+ * first writes cannot each create a key: the second would overwrite the first and leave its
+ * ciphertext unreadable. The promise is dropped when it settles, so a failed creation is retried
+ * by the next caller, and no key is held in memory after its keystore entry is gone.
+ */
+function getOrCreateKey(): Promise<Uint8Array> {
+  if (!pendingKey) {
+    pendingKey = loadOrCreateKey().finally(() => {
+      pendingKey = null;
+    });
+  }
+  return pendingKey;
 }
 
 async function seal(plaintext: string): Promise<string> {
