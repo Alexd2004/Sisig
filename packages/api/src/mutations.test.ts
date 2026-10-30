@@ -177,8 +177,9 @@ describe('useCreateOrder', () => {
 });
 
 describe('useRedeemPoints', () => {
-  // The default mutationFn always throws until redeem_loyalty_reward exists. Options are spread
-  // after the default mutationFn, so this type lets a test override it and reach the success path.
+  // The default mutationFn always throws until redeem_loyalty_reward exists. The type omits
+  // mutationFn, so the override below works only at runtime: options are spread after the
+  // default mutationFn, which replaces it and reaches the success path.
   type RedeemOptions = NonNullable<Parameters<typeof useRedeemPoints>[2]>;
   const redeem = { rewardId: 'reward-1', points: 50 };
 
