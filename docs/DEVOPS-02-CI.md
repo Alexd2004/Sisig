@@ -85,7 +85,7 @@ pnpm db:test
 pnpm db:lint
 
 # 3. Types drift (exit 1 means commit the regenerated file)
-pnpm db:types
+pnpm db:types   # if the stack is not running, this exits 1 and leaves the committed file unchanged
 git diff --exit-code packages/api/src/database.types.ts
 
 # 4. Edge Functions
@@ -162,7 +162,7 @@ If a job fails for a reason unrelated to the change (rare flakiness), open the P
 
 ### DEVOPS-04: Build & Deploy
 - `pnpm build` for the mobile and admin apps
-- `expo eas build` cloud builds
+- `eas build` cloud builds (EAS CLI; not configured yet, there is no `eas.json`)
 - Deploy to Vercel (admin) and to the App Store and Play Store (mobile)
 
 ### Data Migration Testing
