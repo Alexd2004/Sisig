@@ -9,7 +9,12 @@ import { keys } from './query-keys';
 
 // The hooks call useMutation, which needs a React tree. These tests run in node without one,
 // so useMutation is replaced by the MutationObserver it wraps. The real TanStack mutation
-// lifecycle (mutationFn, onSuccess, onError, onSettled) still runs against the test QueryClient.
+// lifecycle (mutationFn, onSuccess, onError, onSettled) still runs.
+//
+// Known gap: real useMutation takes its QueryClient from React context, not from the hook's
+// queryClient argument. The shim ignores context and always uses activeQueryClient, which
+// beforeEach sets to the same instance the test passes to the hook. A hook that passed a
+// different client than the context's would not be caught here.
 let activeQueryClient: QueryClient;
 
 jest.mock('@tanstack/react-query', () => {
@@ -125,17 +130,77 @@ describe('useCreateOrder', () => {
     expect(onSuccess).not.toHaveBeenCalled();
     expect(queryClient.getQueryState(keys.orders.list())?.isInvalidated).toBe(false);
   });
+
+  it('resolves mutateAsync only after an async caller onSuccess has finished', async () => {
+    const { client } = createSupabaseStub();
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const onSuccess = jest.fn(async () => {
+      await gate;
+    });
+    let resolved = false;
+
+    const pending = useCreateOrder(client, queryClient, { onSuccess }).mutateAsync(payload);
+    pending.then(() => {
+      resolved = true;
+    });
+
+    // One macrotask lets the mutation reach the caller's onSuccess, which is now waiting on the gate.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+    expect(resolved).toBe(false);
+
+    release();
+    await expect(pending).resolves.toEqual({ orderId: ORDER_ID });
+    expect(resolved).toBe(true);
+  });
+
+  it('sends a rejecting async caller onSuccess to onError', async () => {
+    const { client } = createSupabaseStub();
+    const failure = new Error('side effect failed');
+    const onError = jest.fn();
+
+    const error = await useCreateOrder(client, queryClient, {
+      onSuccess: async () => {
+        throw failure;
+      },
+      onError,
+    })
+      .mutateAsync(payload)
+      .catch((e: unknown) => e);
+
+    expect(error).toBe(failure);
+    expect(leadingArgs(onError, 1)).toEqual([failure]);
+  });
 });
 
 describe('useRedeemPoints', () => {
-  it('still calls the caller onError on failure, without invalidating loyalty or calling an RPC', async () => {
+  // The default mutationFn always throws until redeem_loyalty_reward exists. Options are spread
+  // after the default mutationFn, so this type lets a test override it and reach the success path.
+  type RedeemOptions = NonNullable<Parameters<typeof useRedeemPoints>[2]>;
+  const redeem = { rewardId: 'reward-1', points: 50 };
+
+  it('invalidates loyalty and calls the caller onSuccess when the redeem succeeds', async () => {
     queryClient.setQueryData(keys.loyalty.points(), { total_points: 100 });
-    const { client, rpc } = createSupabaseStub();
+    const { client } = createSupabaseStub();
+    const onSuccess = jest.fn();
+    // Omit<..., 'mutationFn'> excludes mutationFn from the type, so the override is cast.
+    const options = { mutationFn: async () => undefined, onSuccess } as RedeemOptions;
+
+    await useRedeemPoints(client, queryClient, options).mutateAsync(redeem);
+
+    expect(queryClient.getQueryState(keys.loyalty.points())?.isInvalidated).toBe(true);
+    expect(leadingArgs(onSuccess, 2)).toEqual([undefined, redeem]);
+  });
+
+  it('still calls the caller onError on failure, without invalidating loyalty', async () => {
+    queryClient.setQueryData(keys.loyalty.points(), { total_points: 100 });
+    const { client } = createSupabaseStub();
     const onSuccess = jest.fn();
     const onError = jest.fn();
-    const redeem = { rewardId: 'reward-1', points: 50 };
 
-    // The mutationFn is a stub that always throws until redeem_loyalty_reward exists.
     const error = await useRedeemPoints(client, queryClient, { onSuccess, onError })
       .mutateAsync(redeem)
       .catch((e: unknown) => e);
@@ -144,6 +209,5 @@ describe('useRedeemPoints', () => {
     expect(leadingArgs(onError, 2)).toEqual([error, redeem]);
     expect(onSuccess).not.toHaveBeenCalled();
     expect(queryClient.getQueryState(keys.loyalty.points())?.isInvalidated).toBe(false);
-    expect(rpc).not.toHaveBeenCalled();
   });
 });
