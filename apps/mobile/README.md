@@ -11,7 +11,7 @@ pnpm install
 pnpm dev
 ```
 
-This starts the Expo dev server. Scan the QR code with your device or use an emulator.
+This starts the Expo dev server. Open the development client on a simulator or device and connect it to the server (see Development Client below). Expo Go cannot run this app.
 
 ## Project Structure
 
@@ -47,24 +47,28 @@ Expo Go cannot run custom native code, so we build and run a custom dev client.
 
 ### Building the Development Client
 
+Install the development client with the local Expo CLI. This needs Xcode for iOS or Android Studio for Android.
+
 **iOS Simulator:**
 
 ```bash
-expo build:ios --dev-client --simulator
+pnpm -F @sisig/mobile exec expo run:ios
 ```
 
-**Android Device:**
+**Android Device or Emulator:**
 
 ```bash
-expo build:android --dev-client
+pnpm -F @sisig/mobile exec expo run:android
 ```
 
 **Local Development (Easiest):**
 
 ```bash
 pnpm dev
-# Then open in Expo app or development client
+# Then open the installed development client and connect it to the server
 ```
+
+**Release builds** are not configured. The local Expo CLI rejects `expo build`, and there is no `eas.json`. Release builds need EAS (`eas build`); that setup is deferred to DEVOPS-04.
 
 ## Routing (Expo Router)
 
@@ -263,8 +267,8 @@ pnpm typecheck   # TypeScript (strict mode)
 # View logs in terminal
 pnpm dev
 
-# Or use Expo CLI directly
-expo start --dev-client
+# Or use the local Expo CLI directly
+pnpm -F @sisig/mobile exec expo start --dev-client
 ```
 
 ### TypeScript Errors
@@ -316,13 +320,13 @@ const apiKey = process.env.ANTHROPIC_API_KEY;
 ### `expo-doctor` reports errors
 
 ```bash
-pnpm doctor
+pnpm -F @sisig/mobile run doctor
 ```
 
 Check [Expo docs](https://docs.expo.dev) or update Expo:
 
 ```bash
-pnpm upgrade expo
+pnpm -F @sisig/mobile upgrade expo
 ```
 
 ### Claude API errors
@@ -336,15 +340,16 @@ pnpm upgrade expo
 Clear Jest cache:
 
 ```bash
-pnpm test -- --clearCache
+pnpm -F @sisig/mobile test -- --clearCache
 ```
 
 ### Native module errors
 
-Rebuild development client:
+Rebuild the development client, then clear the Metro cache:
 
 ```bash
-expo build:ios --dev-client --clear-cache
+pnpm -F @sisig/mobile exec expo run:ios        # or: expo run:android
+pnpm -F @sisig/mobile exec expo start --dev-client --clear
 ```
 
 ## Next Steps

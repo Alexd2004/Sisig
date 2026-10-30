@@ -42,3 +42,13 @@ Thumbs.db
 # Mobile builds
 *.apk
 *.ipa
+
+# Supabase CLI local state
+supabase/.temp/
+
+# Mobile signing keys and service config
+*.keystore
+*.jks
+.sentryclirc
+google-services.json
+GoogleService-Info.plist

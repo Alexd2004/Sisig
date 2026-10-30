@@ -24,9 +24,11 @@ pnpm install
 # 3. Start development server
 pnpm dev
 
-# 4. Open Expo in your terminal and scan QR code
-# or use Expo Go on your device
+# 4. Install the development client on a simulator or device (see "Development Client")
+# 5. Open the development client and connect it to the server started by pnpm dev
 ```
+
+Expo Go cannot run this app, so do not use it.
 
 ## Project Structure
 
@@ -59,7 +61,7 @@ All packages are linked via `pnpm` workspaces. Build caching and task orchestrat
 ```bash
 pnpm install            # Install all dependencies
 pnpm dev                # Run dev task in all workspaces (parallel)
-pnpm build              # Build all packages
+pnpm build              # Not configured yet: the mobile build step fails (see "Release Builds")
 pnpm lint               # Lint all packages (parallel)
 pnpm typecheck          # TypeScript strict mode (zero errors)
 pnpm test               # Jest tests across workspaces
@@ -72,8 +74,10 @@ pnpm format:check       # Check formatting without changes
 Expo uses Metro bundler with built-in monorepo support. Verify setup:
 
 ```bash
-pnpm doctor             # Runs expo-doctor to check config
+pnpm -F @sisig/mobile run doctor   # Runs expo-doctor to check config
 ```
+
+Plain `pnpm doctor` does not run expo-doctor. It runs pnpm's own checker, because `doctor` is a built-in pnpm command, so use `run doctor` as shown.
 
 ## TypeScript Strict Mode
 
@@ -108,17 +112,20 @@ We use `expo-dev-client` because the app requires native modules:
 
 Expo Go does not support custom native code, so development builds are required from day one.
 
-### Building for iOS Simulator
+### Building the Development Client Locally
+
+Install the development client with the local Expo CLI. This needs Xcode for iOS or Android Studio for Android.
 
 ```bash
-expo build:ios --dev-client --simulator
+pnpm -F @sisig/mobile exec expo run:ios        # iOS simulator
+pnpm -F @sisig/mobile exec expo run:android    # Android device or emulator
 ```
 
-### Building for Android Device
+Then run `pnpm dev` and connect the installed client to the server.
 
-```bash
-expo build:android --dev-client
-```
+### Release Builds (Not Configured)
+
+The local Expo CLI rejects `expo build`, and the repo has no `eas.json`. Release builds need EAS (`eas build`). EAS setup is deferred to DEVOPS-04.
 
 ## Linting & Formatting
 
@@ -128,14 +135,6 @@ All workspaces share ESLint and Prettier configs via `@sisig/config`.
 pnpm lint               # ESLint all packages
 pnpm format             # Auto-format with Prettier
 pnpm format:check       # Check formatting (not run in CI yet; see docs/DEVOPS-02-CI.md)
-```
-
-A **deliberately bad import** will fail lint:
-
-```ts
-// This will error during linting
-import * as _ from 'crypto';
-const unused = _;
 ```
 
 ## Testing
@@ -153,8 +152,10 @@ Run tests:
 
 ```bash
 pnpm test               # All tests
-pnpm test --watch      # Watch mode
+pnpm -F @sisig/mobile test -- --watch   # Watch mode (one package at a time)
 ```
+
+`pnpm test --watch` does not work at the root: pnpm rejects `--watch`. Pass it to Jest through a single package, as shown.
 
 ## Theme and Brand Tokens (THEME-01)
 
@@ -179,7 +180,7 @@ The values below are placeholders until the client supplies final assets. Do not
 - ✅ `pnpm install && pnpm dev` starts Expo dev server from clean clone
 - ✅ New dev completes onboarding < 30 minutes
 - ✅ TypeScript strict enabled in all packages; `pnpm typecheck` passes with zero errors
-- ✅ `pnpm lint` and `pnpm format:check` run across workspaces; bad import fails lint
+- ✅ `pnpm lint` and `pnpm format:check` run across workspaces
 - ✅ Development client builds and runs on iOS simulator and Android device
 - ✅ Imports from `@sisig/ui` and `@sisig/api` work in mobile app
 - ✅ Jest + RNTL sample tests in mobile app and API packages
@@ -211,8 +212,8 @@ All PRs require ≥1 CODEOWNER approval and all required checks to pass.
 Update Expo or check [Expo documentation](https://docs.expo.dev).
 
 ```bash
-pnpm upgrade expo
-pnpm doctor
+pnpm -F @sisig/mobile upgrade expo
+pnpm -F @sisig/mobile run doctor
 ```
 
 ### TypeScript errors after updating packages
@@ -220,7 +221,7 @@ pnpm doctor
 Clear cache and reinstall:
 
 ```bash
-rm -rf node_modules .pnpm-lock.yaml pnpm-lock.yaml
+rm -rf node_modules
 pnpm install
 pnpm typecheck
 ```
@@ -313,4 +314,4 @@ Fix the ESLint findings that `pnpm lint` reports. `pnpm format` applies Prettier
 
 ---
 
-**Questions?** Check CONTRIBUTING.md or app-specific READMEs.
+**Questions?** Check CONTRIBUTING.md or the READMEs that exist: `apps/mobile/README.md`, `supabase/README.md` and `packages/claude/README.md`.

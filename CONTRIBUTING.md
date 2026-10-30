@@ -32,7 +32,7 @@ Normal releases are tags on `main`. Do not create a release branch for them.
 1. Make sure `main` contains everything for the release and all checks are green
 2. Open a PR with the version bump and changelog update (`chore(JIRA-KEY): release x.y.z`); `main` is protected, so this goes through the normal PR flow
 3. Tag the merge commit on `main` as `vx.y.z`
-4. CI/CD deploys from the tag
+4. Deploy manually for now. No workflow in `.github/workflows` deploys from tags: CI runs lint, tests, database checks and secret scans only. A build and deploy pipeline is planned for DEVOPS-04.
 
 ### Hotfix
 
@@ -41,7 +41,7 @@ Use a `release/x.y` branch only to ship a hotfix to an already-released line.
 1. If `release/x.y` does not exist yet, create it from the `vx.y.z` tag of the affected release
 2. Create `hotfix/JIRA-KEY-description` off `release/x.y`
 3. Open a PR into `release/x.y` with the fix; the same review and squash rules apply
-4. After merge, tag the new patch version `vx.y.(z+1)` on `release/x.y` and deploy from the tag
+4. After merge, tag the new patch version `vx.y.(z+1)` on `release/x.y` and deploy it manually (no tag-based deploy workflow exists yet)
 5. Bring the fix to `main` with its own PR (cherry-pick the squashed commit); never push to `main` directly
 
 ## Commit Messages
@@ -114,8 +114,8 @@ pnpm typecheck
 # Test
 pnpm test
 
-# Expo diagnostics
-pnpm doctor
+# Expo diagnostics (expo-doctor; plain `pnpm doctor` runs pnpm's own checker)
+pnpm -F @sisig/mobile run doctor
 ```
 
 ## Mobile Development
@@ -133,19 +133,21 @@ We use `expo-dev-client` for development builds (not Expo Go) due to native modu
 ### Building Development Client
 
 ```bash
-# iOS simulator
-expo build:ios --dev-client --simulator
+# iOS simulator (needs Xcode)
+pnpm -F @sisig/mobile exec expo run:ios
 
-# Android device
-expo build:android --dev-client
+# Android device or emulator (needs Android Studio)
+pnpm -F @sisig/mobile exec expo run:android
 ```
+
+Release builds are not configured. The local Expo CLI rejects `expo build`, and the repo has no `eas.json`. Release builds need EAS (`eas build`), deferred to DEVOPS-04.
 
 ### Metro Monorepo Resolution
 
 Expo's built-in monorepo support via Metro is configured. Verify with:
 
 ```bash
-expo-doctor
+pnpm -F @sisig/mobile run doctor
 ```
 
 ## Data Layer
@@ -221,4 +223,4 @@ New developers should:
 
 ## Questions?
 
-See app-specific READMEs in `apps/mobile`, `apps/admin`, and package READMEs in `packages/`.
+See the app README in `apps/mobile` and the package READMEs in `packages/`. `apps/admin` has no README yet; it is planned with ADM-01.
