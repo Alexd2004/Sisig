@@ -10,22 +10,23 @@ import {
 
 export type SessionStatus = 'loading' | 'signed-in' | 'signed-out';
 
-type ResolvedSessionStatus = Exclude<SessionStatus, 'loading'>;
+export type ResolvedSessionStatus = Exclude<SessionStatus, 'loading'>;
 
 /**
- * Seam for PLAT-03 (data layer). PLAT-03 supplies the real source: restore the
- * Supabase session from secure storage on launch, and sign out through the
- * Supabase client. Until then the default source reports a signed-out session.
+ * Where SessionProvider gets the session. The app passes the Supabase-backed source
+ * (supabase-source.ts). Tests pass fakes.
  */
 export interface SessionSource {
+  /** The session that exists at start-up. A rejection is treated as signed out. */
   restore: () => Promise<ResolvedSessionStatus>;
+  /**
+   * Calls `listener` with each change after start-up: sign-in, sign-out, or a session
+   * that expired. Returns a function that stops the subscription.
+   */
+  subscribe: (listener: (status: ResolvedSessionStatus) => void) => () => void;
+  /** Signs out and clears what the previous user left on the device. */
   signOut: () => Promise<void>;
 }
-
-export const signedOutSessionSource: SessionSource = {
-  restore: () => Promise.resolve('signed-out'),
-  signOut: () => Promise.resolve(),
-};
 
 export interface SessionValue {
   status: SessionStatus;
@@ -35,18 +36,25 @@ export interface SessionValue {
 const SessionContext = createContext<SessionValue | null>(null);
 
 interface SessionProviderProps {
-  source?: SessionSource;
+  source: SessionSource;
   children: ReactNode;
 }
 
-export function SessionProvider({
-  source = signedOutSessionSource,
-  children,
-}: SessionProviderProps): JSX.Element {
+export function SessionProvider({ source, children }: SessionProviderProps): JSX.Element {
   const [status, setStatus] = useState<SessionStatus>('loading');
 
   useEffect(() => {
     let active = true;
+    // A change that arrives before restore settles is newer than the restore result,
+    // so the restore result must not overwrite it.
+    let changedBeforeRestore = false;
+
+    const unsubscribe = source.subscribe((next) => {
+      changedBeforeRestore = true;
+      if (active) {
+        setStatus(next);
+      }
+    });
 
     const restore = async (): Promise<void> => {
       let next: ResolvedSessionStatus = 'signed-out';
@@ -55,7 +63,7 @@ export function SessionProvider({
       } catch (error) {
         console.error('Failed to restore session:', error);
       }
-      if (active) {
+      if (active && !changedBeforeRestore) {
         setStatus(next);
       }
     };
@@ -64,6 +72,7 @@ export function SessionProvider({
 
     return () => {
       active = false;
+      unsubscribe();
     };
   }, [source]);
 

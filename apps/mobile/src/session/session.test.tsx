@@ -1,6 +1,11 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { Pressable, Text } from 'react-native';
-import { SessionProvider, useSession, type SessionSource } from './session';
+import {
+  SessionProvider,
+  useSession,
+  type ResolvedSessionStatus,
+  type SessionSource,
+} from './session';
 
 function StatusProbe(): JSX.Element {
   const { status, signOut } = useSession();
@@ -15,12 +20,93 @@ function StatusProbe(): JSX.Element {
 }
 
 function sourceWithRestore(restore: SessionSource['restore']): SessionSource {
-  return { restore, signOut: jest.fn(() => Promise.resolve()) };
+  return {
+    restore,
+    subscribe: () => () => undefined,
+    signOut: jest.fn(() => Promise.resolve()),
+  };
 }
 
 describe('SessionProvider', () => {
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  it('applies a change the source reports after start-up', async () => {
+    const listeners: ((status: ResolvedSessionStatus) => void)[] = [];
+    const source: SessionSource = {
+      restore: () => Promise.resolve('signed-in'),
+      subscribe: (listener) => {
+        listeners.push(listener);
+        return () => undefined;
+      },
+      signOut: () => Promise.resolve(),
+    };
+
+    render(
+      <SessionProvider source={source}>
+        <StatusProbe />
+      </SessionProvider>
+    );
+    await waitFor(() => expect(screen.getByText('signed-in')).toBeTruthy());
+
+    act(() => {
+      listeners.forEach((listener) => listener('signed-out'));
+    });
+
+    expect(screen.getByText('signed-out')).toBeTruthy();
+  });
+
+  it('keeps a change that arrives before a slower restore settles', async () => {
+    const listeners: ((status: ResolvedSessionStatus) => void)[] = [];
+    let finishRestore: (status: ResolvedSessionStatus) => void = () => undefined;
+    const source: SessionSource = {
+      restore: () =>
+        new Promise<ResolvedSessionStatus>((resolve) => {
+          finishRestore = resolve;
+        }),
+      subscribe: (listener) => {
+        listeners.push(listener);
+        return () => undefined;
+      },
+      signOut: () => Promise.resolve(),
+    };
+
+    render(
+      <SessionProvider source={source}>
+        <StatusProbe />
+      </SessionProvider>
+    );
+    act(() => {
+      listeners.forEach((listener) => listener('signed-out'));
+    });
+    await waitFor(() => expect(screen.getByText('signed-out')).toBeTruthy());
+
+    await act(async () => {
+      finishRestore('signed-in');
+    });
+
+    expect(screen.getByText('signed-out')).toBeTruthy();
+  });
+
+  it('stops the subscription when the provider unmounts', async () => {
+    const unsubscribe = jest.fn();
+    const source: SessionSource = {
+      restore: () => Promise.resolve('signed-out'),
+      subscribe: () => unsubscribe,
+      signOut: () => Promise.resolve(),
+    };
+
+    const { unmount } = render(
+      <SessionProvider source={source}>
+        <StatusProbe />
+      </SessionProvider>
+    );
+    await waitFor(() => expect(screen.getByText('signed-out')).toBeTruthy());
+
+    unmount();
+
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
 
   it('reports the restored session once the source resolves', async () => {
