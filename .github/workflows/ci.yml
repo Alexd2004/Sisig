@@ -52,7 +52,9 @@ jobs:
 
       # `expo install --check` only compares versions. The bundle step catches
       # Metro resolution errors (missing entry point, undeclared or mis-pinned
-      # packages). @sisig/* resolve through dist/, so build their dependencies first.
+      # packages). @sisig/* resolve through dist/. The typecheck step already
+      # builds them through turbo's ^build dependency, so this build is a guard
+      # that keeps the bundle step working when it runs standalone.
       - name: Build workspace dependencies of the mobile app
         run: pnpm turbo run build --filter='@sisig/mobile^...'
 
