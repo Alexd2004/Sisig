@@ -121,6 +121,34 @@ describe('nativeSessionStorage', () => {
     expect(await nativeSessionStorage.getItem('other-key')).toBe('other-value');
   });
 
+  it('gives two concurrent first writes the same key', async () => {
+    const SecureStore = jest.requireMock('expo-secure-store');
+    SecureStore.setItemAsync.mockClear();
+
+    // Neither write finds a key yet. Both must share one key creation, not generate two.
+    await Promise.all([
+      nativeSessionStorage.setItem('sb-auth-token', SESSION_JSON),
+      nativeSessionStorage.setItem('other-key', 'other-value'),
+    ]);
+
+    expect(SecureStore.setItemAsync).toHaveBeenCalledTimes(1);
+    // Both entries open, so both were sealed under the key that is now in the keystore.
+    expect(await nativeSessionStorage.getItem('sb-auth-token')).toBe(SESSION_JSON);
+    expect(await nativeSessionStorage.getItem('other-key')).toBe('other-value');
+  });
+
+  it('retries key creation after a failed first write', async () => {
+    const SecureStore = jest.requireMock('expo-secure-store');
+    SecureStore.setItemAsync.mockRejectedValueOnce(new Error('keychain write failed'));
+
+    await expect(nativeSessionStorage.setItem('sb-auth-token', SESSION_JSON)).rejects.toThrow(
+      'keychain write failed'
+    );
+
+    await nativeSessionStorage.setItem('sb-auth-token', SESSION_JSON);
+    expect(await nativeSessionStorage.getItem('sb-auth-token')).toBe(SESSION_JSON);
+  });
+
   describe('clearSessionStorage', () => {
     it('deletes every sealed entry, the legacy entries and the AES key', async () => {
       await nativeSessionStorage.setItem('sb-auth-token', SESSION_JSON);
@@ -131,6 +159,16 @@ describe('nativeSessionStorage', () => {
       expect(await AsyncStorage.getAllKeys()).toEqual([]);
       expect(mockKeystore.has('sisig_session_key')).toBe(false);
       expect(await nativeSessionStorage.getItem('sb-auth-token')).toBeNull();
+    });
+
+    it('still removes the sealed entries when deleting the key rejects', async () => {
+      const SecureStore = jest.requireMock('expo-secure-store');
+      await nativeSessionStorage.setItem('sb-auth-token', SESSION_JSON);
+      SecureStore.deleteItemAsync.mockRejectedValueOnce(new Error('keychain unavailable'));
+
+      await expect(clearSessionStorage()).rejects.toThrow('keychain unavailable');
+
+      expect(await AsyncStorage.getItem('sisig.secure.v1:sb-auth-token')).toBeNull();
     });
 
     it('leaves unrelated AsyncStorage keys alone', async () => {
