@@ -11,10 +11,10 @@ Every pull request to `main` runs automated checks for code quality, database in
 ```
 Pull request to main
 ├── CI (.github/workflows/ci.yml)
-│   ├── lint-and-test   ESLint, tsc --noEmit, Jest, expo install --check
+│   ├── lint-and-test   ESLint, tsc --noEmit, Jest, expo install --check, Android bundle
 │   ├── database        supabase start, pgTAP tests, supabase db lint
 │   ├── types-drift     pnpm db:types, fail if database.types.ts changes
-│   └── secrets         gitleaks, service-role key grep (apps/, packages/)
+│   └── secrets         gitleaks, service-role key, JWT and Anthropic key grep (apps/, packages/)
 └── Edge Functions (.github/workflows/edge-functions.yml)
     └── deno-tests      deno test, deno fmt --check, deno lint
 ```
@@ -27,7 +27,7 @@ Pull request to main
 
 #### Job 1: `lint-and-test`
 - **Measured duration:** about 1 minute (run 40951232765)
-- **Steps:** checkout; pnpm 9; Node 18 with the pnpm store cached; restore `.turbo/cache` with `actions/cache`; `pnpm install --frozen-lockfile`; `pnpm lint`; `pnpm typecheck`; `pnpm test`; `pnpm -F @sisig/mobile exec expo install --check`
+- **Steps:** checkout; pnpm 9; Node 18 with the pnpm store cached; restore `.turbo/cache` with `actions/cache`; `pnpm install --frozen-lockfile`; `pnpm lint`; `pnpm typecheck`; `pnpm test`; `pnpm -F @sisig/mobile exec expo install --check`; `pnpm turbo run build --filter='@sisig/mobile^...'` (builds the `dist/` entry points of the `@sisig/*` packages); `pnpm -F @sisig/mobile exec expo export --platform android --output-dir ../../.expo-export-check` (Metro bundle check; the output is git-ignored and not kept)
 
 #### Job 2: `database`
 - **Measured duration:** about 3 minutes
@@ -44,8 +44,9 @@ Pull request to main
   1. gitleaks (`gitleaks/gitleaks-action@v2`, full history) with default rules. Fails on a detected key or token.
   2. `git grep -F` for the HS256 JWT header `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9` in `apps/` and `packages/`.
   3. `git grep -F` for `SUPABASE_SERVICE_ROLE_KEY` in `apps/` and `packages/`.
+  4. `git grep -E` for `sk-ant-` followed by 20 or more key characters in `apps/` and `packages/`. Placeholders such as `sk-ant-...` in the READMEs do not match. `ANTHROPIC_API_KEY` is not checked, because client code references it legitimately.
 
-  Checks 2 and 3 pass only when `git grep` exits 1 (no match). A match and any other error both fail. The JWT header in check 2 matches every HS256 JWT, including Supabase's legacy anon key, so Supabase keys must come from environment configuration, not from source.
+  Checks 2 to 4 pass only when `git grep` exits 1 (no match). A match and any other error both fail. The JWT header in check 2 matches every HS256 JWT, including Supabase's legacy anon key, so Supabase keys must come from environment configuration, not from source.
 
 ### 2. Edge Functions (`.github/workflows/edge-functions.yml`)
 
@@ -77,6 +78,8 @@ pnpm lint
 pnpm typecheck
 pnpm test
 pnpm -F @sisig/mobile exec expo install --check
+pnpm turbo run build --filter='@sisig/mobile^...'
+pnpm -F @sisig/mobile exec expo export --platform android --output-dir ../../.expo-export-check
 
 # 2. Database (Docker required; the first start pulls images)
 pnpm db:start
@@ -96,6 +99,7 @@ deno lint --no-config supabase/functions
 # 5. Secrets (install gitleaks first: brew install gitleaks)
 gitleaks detect
 git grep -n -I -F -e "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" -e "SUPABASE_SERVICE_ROLE_KEY" -- apps packages
+git grep -n -I -E -e "sk-ant-[A-Za-z0-9_-]{20,}" -- apps packages
 ```
 
 `git grep` searches tracked files only, so stage or commit new files before running the last command. No output from it means clean.
@@ -148,7 +152,7 @@ Detects leaked secrets with its default rules (AWS keys, GitHub tokens, Slack we
 
 ### Service-role key and JWT check
 
-See `secrets` check 2 and 3 above. Client code (`apps/`, `packages/`) must never contain the service-role key. `supabase/` is excluded on purpose, because Edge Functions run server-side and may use it.
+See `secrets` checks 2 to 4 above. Client code (`apps/`, `packages/`) must never contain the service-role key. `supabase/` is excluded on purpose, because Edge Functions run server-side and may use it.
 
 ## Monitoring & Alerts
 
