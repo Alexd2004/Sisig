@@ -7,12 +7,29 @@ interface ButtonProps {
   onPress: () => void;
   title: string;
   style?: ViewStyle;
+  /** Blocks presses and exposes the disabled state to assistive tech. Defaults to false. */
+  disabled?: boolean;
+  /** Spoken label for screen readers. Defaults to `title`. */
+  accessibilityLabel?: string;
+  /** Optional extra spoken context about what pressing does. */
+  accessibilityHint?: string;
 }
 
-export const Button: React.FC<ButtonProps> = ({ onPress, title, style }) => {
+export const Button: React.FC<ButtonProps> = ({
+  onPress,
+  title,
+  style,
+  disabled = false,
+  accessibilityLabel,
+  accessibilityHint,
+}) => {
   const colors = useAppColors();
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? title}
+      accessibilityHint={accessibilityHint}
+      disabled={disabled}
       style={({ pressed }) => [
         styles.button,
         { backgroundColor: pressed ? colors.primaryPressed : colors.primary },
