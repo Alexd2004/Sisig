@@ -32,7 +32,9 @@ Normal releases are tags on `main`. Do not create a release branch for them.
 1. Make sure `main` contains everything for the release and all checks are green
 2. Open a PR with the version bump and changelog update (`chore(JIRA-KEY): release x.y.z`); `main` is protected, so this goes through the normal PR flow
 3. Tag the merge commit on `main` as `vx.y.z`
-4. Deploy manually for now. No workflow in `.github/workflows` deploys from tags: CI runs lint, tests, database checks and secret scans only. A build and deploy pipeline is planned for DEVOPS-04.
+4. Deploy manually for now. No workflow in `.github/workflows` deploys from tags. A build and deploy pipeline is planned for DEVOPS-04. The CI checks on pull requests to `main` are:
+   - `ci.yml`: ESLint, `tsc --noEmit`, Jest, `expo install --check`, pgTAP tests, `supabase db lint`, types drift (`pnpm db:types` must not change the committed file), gitleaks and service-role key greps.
+   - `edge-functions.yml`: `deno test`, `deno fmt --check` and `deno lint` for the Edge Functions.
 
 ### Hotfix
 

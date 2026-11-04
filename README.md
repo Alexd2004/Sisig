@@ -180,11 +180,15 @@ The values below are placeholders until the client supplies final assets. Do not
 - ✅ `pnpm install && pnpm dev` starts Expo dev server from clean clone
 - ✅ New dev completes onboarding < 30 minutes
 - ✅ TypeScript strict enabled in all packages; `pnpm typecheck` passes with zero errors
-- ✅ `pnpm lint` and `pnpm format:check` run across workspaces
-- ✅ Development client builds and runs on iOS simulator and Android device
+- ✅ `pnpm lint` runs across workspaces
+- ⬜ `pnpm format:check` runs across workspaces but currently fails (exit 1) in packages/api, packages/claude, packages/ui and apps/mobile. It is not run in CI.
+- ⬜ Development client builds and runs on iOS simulator and Android device. Not verified here: `expo run:ios` and `expo run:android` were not run, since they need Xcode and Android Studio.
 - ✅ Imports from `@sisig/ui` and `@sisig/api` work in mobile app
 - ✅ Jest + RNTL sample tests in mobile app and API packages
-- ✅ `expo-doctor` reports no issues
+- ⬜ `expo-doctor` reports no issues. `pnpm -F @sisig/mobile run doctor` fails 3 checks:
+  - `app.json`: `ios.supportsTabletMode` is not an allowed property, and the `icon`, `splash.image` and `android.adaptiveIcon.foregroundImage` files do not exist.
+  - `@types/react-native` is installed directly, but `react-native` ships its own types.
+  - Missing peer dependencies: `expo-linking` and `expo-application`.
 
 ## Branching & Releases
 
