@@ -769,13 +769,13 @@ pnpm db:types
 
 1. **Local Dev Client**
    ```bash
-   expo build:ios --dev-client
-   expo build:android --dev-client
+   pnpm -F @sisig/mobile exec expo run:ios        # needs Xcode
+   pnpm -F @sisig/mobile exec expo run:android    # needs Android Studio
    ```
 
-2. **Production Builds**
-   - Expo App Store build (via Expo Cloud)
-   - Android Play Store (via Expo Cloud)
+2. **Production Builds** (not configured yet)
+   - The local Expo CLI rejects `expo build`, and there is no `eas.json`. Release builds need EAS (`eas build`).
+   - Planned for DEVOPS-04: App Store and Play Store builds via EAS.
 
 ### Database Deployment
 

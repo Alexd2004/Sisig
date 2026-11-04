@@ -43,3 +43,16 @@ Thumbs.db
 # Mobile builds
 *.apk
 *.ipa
+
+# Supabase CLI local state
+supabase/.temp/
+
+# Temp file written by db:types before it replaces database.types.ts
+packages/api/src/database.types.ts.tmp
+
+# Mobile signing keys and service config
+*.keystore
+*.jks
+.sentryclirc
+google-services.json
+GoogleService-Info.plist
