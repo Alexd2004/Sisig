@@ -54,10 +54,11 @@ URLs are not templated in `config.toml` yet; AUTH-01 owns that.
 ## Schema (from the migrations on main)
 
 - **`public`**: `profiles`, `user_roles` (roles `customer`, `staff`, `admin`,
-  `owner`), `products`, `orders` and `order_items`.
+  `owner`), `products`, `orders`, `order_items` and `locations` (one store for
+  now).
 - **`private`**: `job_runs` (scheduled job log) and the function
   `custom_access_token_hook`.
-- **Enums**: `app_role`, `order_status`.
+- **Enums**: `app_role`, `order_status`, `pos_type`.
 
 ## Migrations
 

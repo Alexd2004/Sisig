@@ -5,7 +5,21 @@ export type Database = {
   
   "public": {
           Tables: {
-            "order_items": {
+            "locations": {
+                  Row: {
+                    "address": string,"created_at": string,"hours": NonNullable<Json>,"id": string,"latitude": number,"longitude": number,"name": string,"ordering_enabled": boolean,"phone_e164": string | null,"pickup_lead_time_minutes": number,"pos_location_id": string | null,"pos_type": Database["public"]['Enums']["pos_type"] | null,"timezone": string,"uber_eats_url": string | null,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "address": string,"created_at"?: string,"hours"?: NonNullable<Json>,"id"?: string,"latitude": number,"longitude": number,"name": string,"ordering_enabled"?: boolean,"phone_e164"?: string | null,"pickup_lead_time_minutes"?: number,"pos_location_id"?: string | null,"pos_type"?: Database["public"]['Enums']["pos_type"] | null,"timezone"?: string,"uber_eats_url"?: string | null,"updated_at"?: string
+                  }
+                  Update: {
+                    "address"?: string,"created_at"?: string,"hours"?: NonNullable<Json>,"id"?: string,"latitude"?: number,"longitude"?: number,"name"?: string,"ordering_enabled"?: boolean,"phone_e164"?: string | null,"pickup_lead_time_minutes"?: number,"pos_location_id"?: string | null,"pos_type"?: Database["public"]['Enums']["pos_type"] | null,"timezone"?: string,"uber_eats_url"?: string | null,"updated_at"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"order_items": {
                   Row: {
                     "created_at": string,"id": string,"order_id": string,"product_id": string,"quantity": number,"unit_price": number
                   }
@@ -125,7 +139,7 @@ isOneToOne: true
                            }
           }
           Enums: {
-            "app_role": "customer"|"staff"|"admin"|"owner","order_status": "pending"|"confirmed"|"preparing"|"ready"|"completed"|"cancelled"
+            "app_role": "customer"|"staff"|"admin"|"owner","order_status": "pending"|"confirmed"|"preparing"|"ready"|"completed"|"cancelled","pos_type": "square"|"toast"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -241,7 +255,7 @@ export type CompositeTypes<
 export const Constants = {
   "public": {
           Enums: {
-            "app_role": ["customer", "staff", "admin", "owner"],"order_status": ["pending", "confirmed", "preparing", "ready", "completed", "cancelled"]
+            "app_role": ["customer", "staff", "admin", "owner"],"order_status": ["pending", "confirmed", "preparing", "ready", "completed", "cancelled"],"pos_type": ["square", "toast"]
           }
         }
 } as const
