@@ -1,8 +1,10 @@
 -- pgTAP tests for public.locations (DATA-18, single store).
--- Tests 6-7 read the placeholder store from supabase/seed.sql. This file inserts nothing.
+-- Tests 6-7 read the placeholder store from supabase/seed.sql. They look the store up by
+-- its PLACEHOLDER label and id, so real stores added later do not break them.
+-- This file inserts nothing.
 
 begin;
-select plan(7);
+select plan(11);
 
 -- Test 1: the columns.
 select columns_are(
@@ -49,9 +51,9 @@ select policies_are(
 
 -- Tests 6-7: the seed adds exactly one clearly labelled placeholder Edmonton store.
 select is(
-  (select count(*)::int from public.locations),
+  (select count(*)::int from public.locations where name like 'PLACEHOLDER%'),
   1,
-  'the seed adds exactly one store'
+  'the seed adds exactly one placeholder store'
 );
 
 select ok(
@@ -63,6 +65,16 @@ select ok(
     where id = '10ca7100-0000-4000-8000-000000000001'),
   'the seeded store is a labelled PLACEHOLDER in Edmonton with ordering off'
 );
+
+-- Tests 8-11: RLS is on, and every API role can only read.
+select ok(
+  (select relrowsecurity from pg_class where oid = 'public.locations'::regclass),
+  'RLS is enabled on locations'
+);
+
+select table_privs_are('public', 'locations', 'anon', array['SELECT']::name[], 'anon can only SELECT locations');
+select table_privs_are('public', 'locations', 'authenticated', array['SELECT']::name[], 'authenticated can only SELECT locations');
+select table_privs_are('public', 'locations', 'service_role', array['SELECT']::name[], 'service_role can only SELECT locations');
 
 select * from finish();
 rollback;

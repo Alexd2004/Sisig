@@ -10,6 +10,9 @@
 -- No real store data is added here. supabase/seed.sql adds one placeholder store for local
 -- development; real values come from the client.
 --
+-- API roles (anon, authenticated, service_role) get SELECT only. Store data is changed by
+-- migrations or, later, admin RPCs.
+--
 -- Forward-only: no existing migration is edited.
 
 create type public.pos_type as enum ('square', 'toast');
@@ -39,7 +42,7 @@ comment on table public.locations is
 comment on column public.locations.hours is
   'Opening hours in the store''s time zone: {"mon":[{"open":"HH:MM","close":"HH:MM"}],...}';
 
--- RLS: store details are public. No write policy, so clients cannot write.
+-- RLS: store details are public. No write policy.
 alter table public.locations enable row level security;
 
 create policy "Anyone can view locations"
@@ -48,5 +51,5 @@ create policy "Anyone can view locations"
   to anon, authenticated
   using (true);
 
-revoke all on public.locations from anon, authenticated;
-grant select on public.locations to anon, authenticated;
+revoke all on public.locations from anon, authenticated, service_role;
+grant select on public.locations to anon, authenticated, service_role;
