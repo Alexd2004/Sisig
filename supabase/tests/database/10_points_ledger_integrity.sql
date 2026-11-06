@@ -5,7 +5,7 @@
 -- transaction, which is rolled back at the end.
 
 begin;
-select plan(14);
+select plan(18);
 
 -- Helpers ------------------------------------------------------------------
 
@@ -59,7 +59,7 @@ select lives_ok(
   'the same idempotency key is allowed for a different source type'
 );
 
--- Tests 4-6: an entry can be reversed once, and only a reversal points at another entry (AC2).
+-- Tests 4-7: an entry can be reversed once, and only a reversal points at another entry (AC2).
 select lives_ok(
   $$
   insert into public.points_ledger (user_id, delta, source_type, reversal_of, idempotency_key)
@@ -86,7 +86,16 @@ select throws_ok(
   'a reversal without reversal_of is rejected'
 );
 
--- Tests 7-9: in-store sources need a location (DATA-18).
+select throws_ok(
+  $$
+  insert into public.points_ledger (user_id, delta, source_type, reversal_of, idempotency_key)
+  values ('10000000-0000-4000-8000-000000000002', -25, 'admin_adjust', '10000000-0000-4000-8000-000000000022', 'rev-10-4')
+  $$,
+  '23514', 'new row for relation "points_ledger" violates check constraint "points_ledger_reversal_of_matches_source"',
+  'a non-reversal entry with reversal_of set is rejected'
+);
+
+-- Tests 8-10: in-store sources need a location (DATA-18).
 select throws_ok(
   $$
   insert into public.points_ledger (user_id, delta, source_type, idempotency_key)
@@ -114,7 +123,7 @@ select throws_ok(
   'receipt without a location is rejected'
 );
 
--- Test 10: chain-level sources do not need a location (DATA-18).
+-- Test 11: chain-level sources do not need a location (DATA-18).
 select lives_ok(
   $$
   insert into public.points_ledger (user_id, delta, source_type, idempotency_key) values
@@ -128,7 +137,7 @@ select lives_ok(
   'chain-level sources are accepted without a location'
 );
 
--- Tests 11-12: delta is non-zero and bounded.
+-- Tests 12-14: delta is non-zero and bounded on both sides.
 select throws_ok(
   $$
   insert into public.points_ledger (user_id, delta, source_type, idempotency_key)
@@ -147,7 +156,21 @@ select throws_ok(
   'a delta above 1,000,000 is rejected'
 );
 
--- Test 13: read-only policy set.
+select throws_ok(
+  $$
+  insert into public.points_ledger (user_id, delta, source_type, idempotency_key)
+  values ('10000000-0000-4000-8000-000000000001', -1000001, 'admin_adjust', 'delta-10-3')
+  $$,
+  '23514', 'new row for relation "points_ledger" violates check constraint "points_ledger_delta_bounded"',
+  'a delta below -1,000,000 is rejected'
+);
+
+-- Tests 15-16: RLS is on, with the member and staff read policies.
+select ok(
+  (select relrowsecurity from pg_class where oid = 'public.points_ledger'::regclass),
+  'RLS is enabled on points_ledger'
+);
+
 select policies_are(
   'public', 'points_ledger',
   array[
@@ -157,7 +180,7 @@ select policies_are(
   'points_ledger has the member and staff read policies'
 );
 
--- Test 14: a member reads only their own entries.
+-- Tests 17-18: a member reads only their own entries; staff read everyone's.
 set local role authenticated;
 select pg_temp.act_as('10000000-0000-4000-8000-000000000001', 'customer');
 
@@ -165,6 +188,16 @@ select results_eq(
   'select distinct user_id from public.points_ledger',
   $$values ('10000000-0000-4000-8000-000000000001'::uuid)$$,
   'a member sees only their own ledger entries'
+);
+
+select pg_temp.act_as('10000000-0000-4000-8000-000000000003', 'staff');
+
+select results_eq(
+  $$select distinct user_id from public.points_ledger
+     where user_id in ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002')
+     order by user_id$$,
+  $$values ('10000000-0000-4000-8000-000000000001'::uuid), ('10000000-0000-4000-8000-000000000002'::uuid)$$,
+  'staff see every member''s ledger entries'
 );
 
 reset role;

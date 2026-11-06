@@ -43,6 +43,8 @@ create table public.loyalty_settings (
 
 comment on table public.loyalty_settings is
   'Versioned loyalty rules. Versions are added by new migrations; the -infinity baseline covers every timestamp. Values are placeholders until client sign-off (LOY-06).';
+comment on column public.loyalty_settings.effective_from is
+  'Start of this version, inclusive. The baseline starts at -infinity: PostgREST returns it as the string "-infinity", which JavaScript Date cannot parse, so clients must handle it explicitly.';
 
 -- Baseline version: placeholder values pending client sign-off.
 insert into public.loyalty_settings (

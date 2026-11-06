@@ -6,8 +6,8 @@
 -- the reward to the menu item it gives away. Stock and per-user limits are stored here and
 -- enforced by the redemption RPC (LOY-03), not by this migration.
 --
--- Rewards are managed by staff tools through migrations or RPCs (ADM work); API roles get
--- SELECT only.
+-- Rewards are managed through migrations or admin RPCs (ADM work). API roles (anon,
+-- authenticated, service_role) get SELECT only.
 --
 -- Forward-only: no existing migration is edited.
 
@@ -53,5 +53,5 @@ create policy "Staff can view all rewards"
   to authenticated
   using ((select public.is_staff()));
 
-revoke all on public.rewards from anon, authenticated;
-grant select on public.rewards to anon, authenticated;
+revoke all on public.rewards from anon, authenticated, service_role;
+grant select on public.rewards to anon, authenticated, service_role;
