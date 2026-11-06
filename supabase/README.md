@@ -54,11 +54,16 @@ URLs are not templated in `config.toml` yet; AUTH-01 owns that.
 ## Schema (from the migrations on main)
 
 - **`public`**: `profiles`, `user_roles` (roles `customer`, `staff`, `admin`,
-  `owner`), `products`, `orders`, `order_items` and `locations` (one store for
-  now).
-- **`private`**: `job_runs` (scheduled job log) and the function
-  `custom_access_token_hook`.
-- **Enums**: `app_role`, `order_status`, `pos_type`.
+  `owner`), `products`, `orders`, `order_items`, `locations` (one store for
+  now), `loyalty_settings` (versioned, read with `current_loyalty_settings(at)`),
+  `points_ledger` (append-only), `point_balances`, `rewards` and
+  `reward_redemptions`.
+- **`private`**: `job_runs` (scheduled job log) and the functions
+  `custom_access_token_hook` and `points_ledger_guard` (the ledger's append-only
+  trigger).
+- **Enums**: `app_role`, `order_status`, `pos_type`, `loyalty_rounding_mode`,
+  `loyalty_earn_base`, `loyalty_expiry_policy`, `points_source_type`,
+  `redemption_status`, `redemption_channel`.
 
 ## Migrations
 
