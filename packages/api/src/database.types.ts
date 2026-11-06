@@ -5,53 +5,7 @@ export type Database = {
   
   "public": {
           Tables: {
-            "loyalty_points": {
-                  Row: {
-                    "available_points": number | null,"created_at": string,"id": string,"last_transaction_at": string | null,"redeemed_points": number,"total_points": number,"updated_at": string,"user_id": string
-                  }
-                  ComputedFields: never
-                  Insert: {
-                    "available_points"?: never,"created_at"?: string,"id"?: string,"last_transaction_at"?: string | null,"redeemed_points"?: number,"total_points"?: number,"updated_at"?: string,"user_id": string
-                  }
-                  Update: {
-                    "available_points"?: never,"created_at"?: string,"id"?: string,"last_transaction_at"?: string | null,"redeemed_points"?: number,"total_points"?: number,"updated_at"?: string,"user_id"?: string
-                  }
-                  Relationships: [
-                    {
-      foreignKeyName: "loyalty_points_user_id_fkey"
-      columns: ["user_id"]
-isOneToOne: true
-      referencedRelation: "users"
-      referencedColumns: ["id"]
-    }
-                  ]
-                },"loyalty_transactions": {
-                  Row: {
-                    "created_at": string,"id": string,"order_id": string | null,"points_amount": number,"reason": string | null,"transaction_type": string,"user_id": string
-                  }
-                  ComputedFields: never
-                  Insert: {
-                    "created_at"?: string,"id"?: string,"order_id"?: string | null,"points_amount": number,"reason"?: string | null,"transaction_type": string,"user_id": string
-                  }
-                  Update: {
-                    "created_at"?: string,"id"?: string,"order_id"?: string | null,"points_amount"?: number,"reason"?: string | null,"transaction_type"?: string,"user_id"?: string
-                  }
-                  Relationships: [
-                    {
-      foreignKeyName: "loyalty_transactions_order_id_fkey"
-      columns: ["order_id"]
-isOneToOne: false
-      referencedRelation: "orders"
-      referencedColumns: ["id"]
-    },{
-      foreignKeyName: "loyalty_transactions_user_id_fkey"
-      columns: ["user_id"]
-isOneToOne: false
-      referencedRelation: "users"
-      referencedColumns: ["id"]
-    }
-                  ]
-                },"order_items": {
+            "order_items": {
                   Row: {
                     "created_at": string,"id": string,"order_id": string,"product_id": string,"quantity": number,"unit_price": number
                   }
@@ -93,7 +47,7 @@ isOneToOne: false
       foreignKeyName: "orders_user_id_fkey"
       columns: ["user_id"]
 isOneToOne: false
-      referencedRelation: "users"
+      referencedRelation: "profiles"
       referencedColumns: ["id"]
     }
                   ]
@@ -151,20 +105,6 @@ isOneToOne: true
       referencedColumns: ["id"]
     }
                   ]
-                },"users": {
-                  Row: {
-                    "avatar_url": string | null,"created_at": string,"email": string,"first_name": string | null,"id": string,"is_active": boolean,"last_name": string | null,"phone": string | null,"role": Database["public"]['Enums']["user_role"],"updated_at": string
-                  }
-                  ComputedFields: never
-                  Insert: {
-                    "avatar_url"?: string | null,"created_at"?: string,"email": string,"first_name"?: string | null,"id": string,"is_active"?: boolean,"last_name"?: string | null,"phone"?: string | null,"role"?: Database["public"]['Enums']["user_role"],"updated_at"?: string
-                  }
-                  Update: {
-                    "avatar_url"?: string | null,"created_at"?: string,"email"?: string,"first_name"?: string | null,"id"?: string,"is_active"?: boolean,"last_name"?: string | null,"phone"?: string | null,"role"?: Database["public"]['Enums']["user_role"],"updated_at"?: string
-                  }
-                  Relationships: [
-                    
-                  ]
                 }
           }
           Views: {
@@ -185,7 +125,7 @@ isOneToOne: true
                            }
           }
           Enums: {
-            "app_role": "customer"|"staff"|"admin"|"owner","order_status": "pending"|"confirmed"|"preparing"|"ready"|"completed"|"cancelled","user_role": "customer"|"staff"|"admin"
+            "app_role": "customer"|"staff"|"admin"|"owner","order_status": "pending"|"confirmed"|"preparing"|"ready"|"completed"|"cancelled"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -301,7 +241,7 @@ export type CompositeTypes<
 export const Constants = {
   "public": {
           Enums: {
-            "app_role": ["customer", "staff", "admin", "owner"],"order_status": ["pending", "confirmed", "preparing", "ready", "completed", "cancelled"],"user_role": ["customer", "staff", "admin"]
+            "app_role": ["customer", "staff", "admin", "owner"],"order_status": ["pending", "confirmed", "preparing", "ready", "completed", "cancelled"]
           }
         }
 } as const
