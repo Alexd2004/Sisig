@@ -43,6 +43,13 @@ create table public.reward_redemptions (
 -- Staff code lookup.
 create index idx_reward_redemptions_code on public.reward_redemptions (code);
 
+-- Foreign keys that every profile deletion (AUTH-05) follows: deleting a profile deletes
+-- its orders and sets order_id and fulfilled_by to NULL here. Without these indexes each
+-- of those actions scans the table. user_id is covered by the
+-- (user_id, idempotency_key) unique index.
+create index idx_reward_redemptions_order_id on public.reward_redemptions (order_id);
+create index idx_reward_redemptions_fulfilled_by on public.reward_redemptions (fulfilled_by);
+
 -- A code is unique among issued redemptions.
 create unique index idx_reward_redemptions_code_issued
   on public.reward_redemptions (code)
@@ -50,6 +57,8 @@ create unique index idx_reward_redemptions_code_issued
 
 comment on table public.reward_redemptions is
   'Reward redemptions. code is unique among issued redemptions; state changes are LOY-03 RPC work.';
+comment on column public.reward_redemptions.idempotency_key is
+  'Unique per member. Must not embed user_id, email, phone or other member identifiers: the row outlives the member, whose deletion only sets user_id to NULL';
 
 -- RLS: members read their own redemptions, staff read all. No write policy.
 alter table public.reward_redemptions enable row level security;

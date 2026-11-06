@@ -1,5 +1,5 @@
 -- DATA-04: append-only points ledger.
--- One concern: the public.points_ledger table, its source enum and its append-only guard.
+-- One concern: the public.points_ledger table, its source enum and its append-only trigger.
 --
 -- Every change to a member's points is one ledger row. Rows are never updated or deleted,
 -- by any role, service_role and the table owner included. A mistake is corrected with a
@@ -7,9 +7,11 @@
 --
 -- The only change allowed is the AUTH-05 anonymisation path: deleting a member's profile
 -- sets user_id to NULL through the foreign key (on delete set null), and nothing else in
--- the row changes. The guard trigger allows exactly that update, and only when it comes
--- from the foreign key action (pg_trigger_depth() > 1). A direct
--- "update ... set user_id = null" is rejected like any other update.
+-- the row changes. The append-only trigger allows exactly that update: user_id goes from
+-- a value to NULL, every other column is unchanged, the profile it pointed at no longer
+-- exists, and the update runs inside a trigger (pg_trigger_depth() > 1), as the foreign
+-- key action does. A direct "update ... set user_id = null" is rejected like any other
+-- update, and so is a trigger that clears user_id while the profile still exists.
 --
 -- Sources:
 --   in-store, location_id required: pos_purchase, qr_counter, receipt
@@ -66,6 +68,10 @@ create index idx_points_ledger_user_id_created_at_id
 
 comment on table public.points_ledger is
   'Append-only points ledger. The only allowed change is AUTH-05 anonymisation: deleting the profile sets user_id NULL through the foreign key, and nothing else changes. In-store sources (pos_purchase, qr_counter, receipt) require location_id; chain-level sources (signup_bonus, offer_bonus, expiry, admin_adjust, reward_redeem, redemption_refund, reversal) do not.';
+comment on column public.points_ledger.source_id is
+  'Id of the source record (POS transaction, receipt, offer...). Must not embed user_id, email, phone or other member identifiers: anonymisation clears only user_id';
+comment on column public.points_ledger.idempotency_key is
+  'Unique per source_type. Must not embed user_id, email, phone or other member identifiers: anonymisation clears only user_id';
 comment on column public.points_ledger.reason is
   'Must not contain personal data: anonymisation clears only user_id';
 comment on column public.points_ledger.metadata is
@@ -73,20 +79,24 @@ comment on column public.points_ledger.metadata is
 comment on column public.points_ledger.created_by is
   'Staff or admin actor, set only for staff/admin actions. No foreign key on purpose, so the row outlives the actor';
 
--- Append-only guard. Runs as the caller (security invoker).
-create or replace function private.points_ledger_guard()
+-- Append-only trigger function. Runs as the caller (security invoker). Only the table
+-- owner (or a superuser) can update or delete ledger rows at all, since API roles hold
+-- SELECT only, and the foreign key action also runs as the table owner. So the profiles
+-- lookup below is not filtered by RLS.
+create or replace function private.enforce_points_ledger_append_only()
 returns trigger
 language plpgsql
 set search_path = ''
 as $$
 begin
-  -- AUTH-05 anonymisation: the foreign key action sets user_id to NULL and nothing else
-  -- changes. pg_trigger_depth() > 1 means the update comes from that action (or another
-  -- trigger), not from a statement a client or admin typed.
+  -- AUTH-05 anonymisation: the profile is gone and its foreign key action sets user_id to
+  -- NULL, nothing else changes. pg_trigger_depth() > 1 means the update comes from that
+  -- action (or another trigger), not from a statement a client or admin typed.
   if tg_op = 'UPDATE'
     and old.user_id is not null
     and new.user_id is null
     and (to_jsonb(new) - 'user_id') = (to_jsonb(old) - 'user_id')
+    and not exists (select 1 from public.profiles p where p.id = old.user_id)
     and pg_catalog.pg_trigger_depth() > 1
   then
     return new;
@@ -97,11 +107,11 @@ begin
 end;
 $$;
 
-revoke all on function private.points_ledger_guard() from public;
+revoke all on function private.enforce_points_ledger_append_only() from public;
 
-create trigger points_ledger_guard
+create trigger points_ledger_append_only
   before update or delete on public.points_ledger
-  for each row execute function private.points_ledger_guard();
+  for each row execute function private.enforce_points_ledger_append_only();
 
 -- RLS: members read their own entries, staff read all. No write policy.
 alter table public.points_ledger enable row level security;
