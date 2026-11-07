@@ -56,8 +56,11 @@ URLs are not templated in `config.toml` yet; AUTH-01 owns that.
 - **`public`**: `profiles`, `user_roles` (roles `customer`, `staff`, `admin`,
   `owner`), `products`, `orders`, `order_items`, `locations` (one store for
   now), `loyalty_settings` (versioned, read with `current_loyalty_settings(at)`),
-  `points_ledger` (append-only), `point_balances`, `rewards` and
-  `reward_redemptions`.
+  `points_ledger` (append-only), `point_balances`, `rewards`,
+  `reward_redemptions`, and the chain-wide menu: `menu_categories`, `menu_items`,
+  `modifier_groups`, `modifier_options` and `menu_item_modifier_groups` (soft
+  delete with `archived_at`, read in one call with `menu_public()`). `products` is
+  the legacy catalogue that orders still reference until DATA-06.
 - **`private`**: `job_runs` (scheduled job log) and the functions
   `custom_access_token_hook` and `enforce_points_ledger_append_only` (the ledger's
   append-only trigger).

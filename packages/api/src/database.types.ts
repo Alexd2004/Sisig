@@ -33,6 +33,100 @@ export type Database = {
                   Relationships: [
                     
                   ]
+                },"menu_categories": {
+                  Row: {
+                    "archived_at": string | null,"created_at": string,"description": string | null,"id": string,"image_path": string | null,"is_visible": boolean,"name": string,"sort_order": number,"translations": Json | null,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "archived_at"?: string | null,"created_at"?: string,"description"?: string | null,"id"?: string,"image_path"?: string | null,"is_visible"?: boolean,"name": string,"sort_order"?: number,"translations"?: Json | null,"updated_at"?: string
+                  }
+                  Update: {
+                    "archived_at"?: string | null,"created_at"?: string,"description"?: string | null,"id"?: string,"image_path"?: string | null,"is_visible"?: boolean,"name"?: string,"sort_order"?: number,"translations"?: Json | null,"updated_at"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"menu_item_modifier_groups": {
+                  Row: {
+                    "created_at": string,"menu_item_id": string,"modifier_group_id": string,"sort_order": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"menu_item_id": string,"modifier_group_id": string,"sort_order"?: number
+                  }
+                  Update: {
+                    "created_at"?: string,"menu_item_id"?: string,"modifier_group_id"?: string,"sort_order"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "menu_item_modifier_groups_menu_item_id_fkey"
+      columns: ["menu_item_id"]
+isOneToOne: false
+      referencedRelation: "menu_items"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "menu_item_modifier_groups_modifier_group_id_fkey"
+      columns: ["modifier_group_id"]
+isOneToOne: false
+      referencedRelation: "modifier_groups"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"menu_items": {
+                  Row: {
+                    "allergen_note": string | null,"archived_at": string | null,"available_days": (number)[] | null,"available_from": string | null,"available_until": string | null,"category_id": string,"created_at": string,"description": string | null,"dietary_tags": (string)[],"id": string,"image_path": string | null,"is_available": boolean,"is_featured": boolean,"name": string,"pos_external_id": string | null,"pos_provider": Database["public"]['Enums']["pos_type"] | null,"price_cents": number,"sort_order": number,"translations": Json | null,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "allergen_note"?: string | null,"archived_at"?: string | null,"available_days"?: (number)[] | null,"available_from"?: string | null,"available_until"?: string | null,"category_id": string,"created_at"?: string,"description"?: string | null,"dietary_tags"?: (string)[],"id"?: string,"image_path"?: string | null,"is_available"?: boolean,"is_featured"?: boolean,"name": string,"pos_external_id"?: string | null,"pos_provider"?: Database["public"]['Enums']["pos_type"] | null,"price_cents": number,"sort_order"?: number,"translations"?: Json | null,"updated_at"?: string
+                  }
+                  Update: {
+                    "allergen_note"?: string | null,"archived_at"?: string | null,"available_days"?: (number)[] | null,"available_from"?: string | null,"available_until"?: string | null,"category_id"?: string,"created_at"?: string,"description"?: string | null,"dietary_tags"?: (string)[],"id"?: string,"image_path"?: string | null,"is_available"?: boolean,"is_featured"?: boolean,"name"?: string,"pos_external_id"?: string | null,"pos_provider"?: Database["public"]['Enums']["pos_type"] | null,"price_cents"?: number,"sort_order"?: number,"translations"?: Json | null,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "menu_items_category_id_fkey"
+      columns: ["category_id"]
+isOneToOne: false
+      referencedRelation: "menu_categories"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"modifier_groups": {
+                  Row: {
+                    "archived_at": string | null,"created_at": string,"id": string,"is_required": boolean,"max_select": number,"min_select": number,"name": string,"translations": Json | null,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "archived_at"?: string | null,"created_at"?: string,"id"?: string,"is_required"?: boolean,"max_select"?: number,"min_select"?: number,"name": string,"translations"?: Json | null,"updated_at"?: string
+                  }
+                  Update: {
+                    "archived_at"?: string | null,"created_at"?: string,"id"?: string,"is_required"?: boolean,"max_select"?: number,"min_select"?: number,"name"?: string,"translations"?: Json | null,"updated_at"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"modifier_options": {
+                  Row: {
+                    "archived_at": string | null,"created_at": string,"id": string,"is_available": boolean,"is_default": boolean,"modifier_group_id": string,"name": string,"pos_external_id": string | null,"pos_provider": Database["public"]['Enums']["pos_type"] | null,"price_delta_cents": number,"sort_order": number,"translations": Json | null,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "archived_at"?: string | null,"created_at"?: string,"id"?: string,"is_available"?: boolean,"is_default"?: boolean,"modifier_group_id": string,"name": string,"pos_external_id"?: string | null,"pos_provider"?: Database["public"]['Enums']["pos_type"] | null,"price_delta_cents"?: number,"sort_order"?: number,"translations"?: Json | null,"updated_at"?: string
+                  }
+                  Update: {
+                    "archived_at"?: string | null,"created_at"?: string,"id"?: string,"is_available"?: boolean,"is_default"?: boolean,"modifier_group_id"?: string,"name"?: string,"pos_external_id"?: string | null,"pos_provider"?: Database["public"]['Enums']["pos_type"] | null,"price_delta_cents"?: number,"sort_order"?: number,"translations"?: Json | null,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "modifier_options_modifier_group_id_fkey"
+      columns: ["modifier_group_id"]
+isOneToOne: false
+      referencedRelation: "modifier_groups"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"order_items": {
                   Row: {
                     "created_at": string,"id": string,"order_id": string,"product_id": string,"quantity": number,"unit_price": number
@@ -297,6 +391,9 @@ isOneToOne: true
                            },
 "is_staff":
 { Args: Record<PropertyKey, never>; Returns: boolean
+                           },
+"menu_public":
+{ Args: Record<PropertyKey, never>; Returns: Json
                            },
 "set_user_role":
 { Args: { "p_role": Database["public"]['Enums']["app_role"],"p_user_id": string }; Returns: undefined
