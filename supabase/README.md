@@ -54,11 +54,16 @@ URLs are not templated in `config.toml` yet; AUTH-01 owns that.
 ## Schema (from the migrations on main)
 
 - **`public`**: `profiles`, `user_roles` (roles `customer`, `staff`, `admin`,
-  `owner`), `products`, `orders`, `order_items`, `loyalty_points`,
-  `loyalty_transactions`, and the legacy `users` table (see Known issues).
-- **`private`**: `job_runs` (scheduled job log) and the function
-  `custom_access_token_hook`.
-- **Enums**: `app_role`, `user_role`, `order_status`.
+  `owner`), `products`, `orders`, `order_items`, `locations` (one store for
+  now), `loyalty_settings` (versioned, read with `current_loyalty_settings(at)`),
+  `points_ledger` (append-only), `point_balances`, `rewards` and
+  `reward_redemptions`.
+- **`private`**: `job_runs` (scheduled job log) and the functions
+  `custom_access_token_hook` and `enforce_points_ledger_append_only` (the ledger's
+  append-only trigger).
+- **Enums**: `app_role`, `order_status`, `pos_type`, `loyalty_rounding_mode`,
+  `loyalty_earn_base`, `loyalty_expiry_policy`, `points_source_type`,
+  `redemption_status`, `redemption_channel`.
 
 ## Migrations
 
@@ -155,20 +160,11 @@ can reach, and never in the mobile or admin apps. CI greps for it.
 
 ## Known issues (open)
 
-1. **RLS recursion.** The staff policies on `products` and `orders` read
-  `public.users`, and `profiles` reads `public.user_roles`. Those tables' own
-  staff policies read themselves. Any authenticated read of `products`, `orders`,
-  `profiles`, `user_roles` or `users` fails with "infinite recursion detected in
-  policy". Checked on Postgres 14 with stub auth objects. The fix is a forward
-  migration that uses the `is_staff()` and `is_admin()` helpers.
-2. **`db:reset` does not start the stack.** See Clean clone above.
-3. **Two role stores.** `20261028000004` replaced `handle_new_user`, so new
-   accounts no longer get a `public.users` row. Policies that read
-   `public.users.role` never see roles granted in `user_roles`. Owned by DATA-02.
-4. **Access-token hook is not wired up.** `config.toml` does not register
+1. **`db:reset` does not start the stack.** See Clean clone above.
+2. **Access-token hook is not wired up.** `config.toml` does not register
    `custom_access_token_hook`, and no migration grants `supabase_auth_admin` access
    to it. Owned by DATA-02.
-5. **Timing not measured.** The 3-minute `db:reset` target has not been checked.
+3. **Timing not measured.** The 3-minute `db:reset` target has not been checked.
 
 ## Resources
 
