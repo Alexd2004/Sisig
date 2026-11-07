@@ -35,14 +35,11 @@ comment on table public.modifier_groups is
 comment on column public.modifier_groups.translations is
   'Reserved for fr-CA, not populated: {"fr-CA": {"name": "..."}}';
 
--- RLS: anyone sees non-archived groups, staff see every group. No write policy.
+-- RLS: staff see every group. The public read policy ("Anyone can view listed modifier
+-- groups": non-archived groups linked to at least one listed item, so a draft group for an
+-- unreleased item is not readable) needs the join table, so it is created with it in
+-- create_menu_item_modifier_groups. No write policy.
 alter table public.modifier_groups enable row level security;
-
-create policy "Anyone can view active modifier groups"
-  on public.modifier_groups
-  for select
-  to anon, authenticated
-  using (archived_at is null);
 
 create policy "Staff can view all modifier groups"
   on public.modifier_groups

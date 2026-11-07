@@ -46,15 +46,23 @@ comment on column public.modifier_options.price_delta_cents is
 comment on column public.modifier_options.translations is
   'Reserved for fr-CA, not populated: {"fr-CA": {"name": "..."}}';
 
--- RLS: anyone sees non-archived options (sold-out included), staff see every option.
--- No write policy.
+-- RLS: anyone sees non-archived options (sold-out included) of groups they can see, staff
+-- see every option. The group subquery applies the modifier_groups policies, which do not
+-- read modifier_options, so there is no recursion. No write policy.
 alter table public.modifier_options enable row level security;
 
 create policy "Anyone can view active modifier options"
   on public.modifier_options
   for select
   to anon, authenticated
-  using (archived_at is null);
+  using (
+    archived_at is null
+    and exists (
+      select 1
+        from public.modifier_groups g
+       where g.id = modifier_options.modifier_group_id
+    )
+  );
 
 create policy "Staff can view all modifier options"
   on public.modifier_options

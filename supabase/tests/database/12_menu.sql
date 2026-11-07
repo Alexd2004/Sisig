@@ -7,7 +7,7 @@
 -- transaction, which is rolled back at the end.
 
 begin;
-select plan(74);
+select plan(82);
 
 -- Helpers ------------------------------------------------------------------
 
@@ -102,12 +102,13 @@ select columns_are(
   'menu_item_modifier_groups has the expected columns'
 );
 
--- Tests 6-8: money is integer cents, tags are a text array, POS ids use the pos_type enum.
+-- Tests 6-9: money is integer cents, tags are a text array, POS ids use the pos_type enum.
 select col_type_is('public', 'menu_items', 'price_cents', 'integer', 'price_cents is an integer');
+select col_type_is('public', 'modifier_options', 'price_delta_cents', 'integer', 'price_delta_cents is an integer');
 select col_type_is('public', 'menu_items', 'dietary_tags', 'text[]', 'dietary_tags is a text array');
 select col_type_is('public', 'menu_items', 'pos_provider', 'public', 'pos_type', 'pos_provider uses the public.pos_type enum');
 
--- Test 9: RLS is on for every menu table.
+-- Test 10: RLS is on for every menu table.
 select is(
   (select count(*)::int
      from pg_class
@@ -119,7 +120,7 @@ select is(
   'RLS is enabled on all five menu tables'
 );
 
--- Tests 10-24: every API role can only read the menu tables.
+-- Tests 11-25: every API role can only read the menu tables.
 select table_privs_are('public', 'menu_categories', 'anon', array['SELECT']::name[], 'anon can only SELECT menu_categories');
 select table_privs_are('public', 'menu_categories', 'authenticated', array['SELECT']::name[], 'authenticated can only SELECT menu_categories');
 select table_privs_are('public', 'menu_categories', 'service_role', array['SELECT']::name[], 'service_role can only SELECT menu_categories');
@@ -136,7 +137,7 @@ select table_privs_are('public', 'menu_item_modifier_groups', 'anon', array['SEL
 select table_privs_are('public', 'menu_item_modifier_groups', 'authenticated', array['SELECT']::name[], 'authenticated can only SELECT menu_item_modifier_groups');
 select table_privs_are('public', 'menu_item_modifier_groups', 'service_role', array['SELECT']::name[], 'service_role can only SELECT menu_item_modifier_groups');
 
--- Tests 25-29: read-only policy sets.
+-- Tests 26-30: read-only policy sets.
 select policies_are(
   'public', 'menu_categories',
   array['Anyone can view visible categories', 'Staff can view all categories'],
@@ -151,7 +152,7 @@ select policies_are(
 
 select policies_are(
   'public', 'modifier_groups',
-  array['Anyone can view active modifier groups', 'Staff can view all modifier groups'],
+  array['Anyone can view listed modifier groups', 'Staff can view all modifier groups'],
   'modifier_groups has the public and staff read policies'
 );
 
@@ -163,11 +164,11 @@ select policies_are(
 
 select policies_are(
   'public', 'menu_item_modifier_groups',
-  array['Anyone can view menu item modifier groups'],
-  'menu_item_modifier_groups has a single read policy'
+  array['Anyone can view links of listed items', 'Staff can view all menu item modifier groups'],
+  'menu_item_modifier_groups has the public and staff read policies'
 );
 
--- Tests 30-32: menu_public exists, runs as the caller with an empty search_path, and the
+-- Tests 31-33: menu_public exists, runs as the caller with an empty search_path, and the
 -- API roles can call it.
 select has_function('public', 'menu_public', array[]::name[], 'menu_public() exists');
 
@@ -180,11 +181,12 @@ select ok(
 
 select ok(
   has_function_privilege('anon', 'public.menu_public()', 'EXECUTE')
-  and has_function_privilege('authenticated', 'public.menu_public()', 'EXECUTE'),
-  'anon and authenticated can execute menu_public'
+  and has_function_privilege('authenticated', 'public.menu_public()', 'EXECUTE')
+  and has_function_privilege('service_role', 'public.menu_public()', 'EXECUTE'),
+  'anon, authenticated and service_role can execute menu_public'
 );
 
--- Tests 33-36: the seed. Every seeded menu row is a labelled PLACEHOLDER, the shared group
+-- Tests 34-37: the seed. Every seeded menu row is a labelled PLACEHOLDER, the shared group
 -- is defined once and linked to several items, and menu_public returns the seed menu.
 select is(
   (select count(*)::int from (
@@ -215,8 +217,9 @@ select is(
   'menu_public returns the seeded categories in sort order'
 );
 
--- AC2: one call, as anon (RLS included), on seed data. The call before this one warms the
--- plan cache.
+-- AC2: one call, as anon (RLS included), on seed data. The seed menu is small (3
+-- categories, 6 items, 1 group, 2 options), so this checks the AC as written, not real
+-- menu sizes.
 select performs_ok('select public.menu_public()', 100, 'menu_public runs in under 100 ms on seed data');
 
 reset role;
@@ -246,27 +249,31 @@ values
   ('12000000-0000-4000-8000-000000000016', '12000000-0000-4000-8000-000000000003', 'Test 12 item 6', 1000, 1, true, null, null, null, null, null, null),
   ('12000000-0000-4000-8000-000000000017', '12000000-0000-4000-8000-000000000004', 'Test 12 item 7', 1000, 1, true, null, null, null, null, null, null);
 
--- Groups: G1 shared, G2 archived.
+-- Groups: G1 shared, G2 archived, G3 linked only to I6 (hidden category).
 insert into public.modifier_groups (id, name, min_select, max_select, archived_at) values
   ('12000000-0000-4000-8000-000000000021', 'Test 12 group 1', 0, 2, null),
-  ('12000000-0000-4000-8000-000000000022', 'Test 12 group 2', 0, 1, now());
+  ('12000000-0000-4000-8000-000000000022', 'Test 12 group 2', 0, 1, now()),
+  ('12000000-0000-4000-8000-000000000023', 'Test 12 group 3', 0, 1, null);
 
 -- Options in G1: O2 (sort 1), O1 (sort 2, POS mapped), O3 (sort 3, sold out), O4 (archived).
+-- O5 is in G3.
 insert into public.modifier_options
   (id, modifier_group_id, name, price_delta_cents, sort_order, is_available, archived_at, pos_provider, pos_external_id)
 values
   ('12000000-0000-4000-8000-000000000031', '12000000-0000-4000-8000-000000000021', 'Test 12 option 1', 250, 2, true, null, 'square', 'TEST-12-OPT-1'),
   ('12000000-0000-4000-8000-000000000032', '12000000-0000-4000-8000-000000000021', 'Test 12 option 2', 150, 1, true, null, null, null),
   ('12000000-0000-4000-8000-000000000033', '12000000-0000-4000-8000-000000000021', 'Test 12 option 3', 0, 3, false, null, null, null),
-  ('12000000-0000-4000-8000-000000000034', '12000000-0000-4000-8000-000000000021', 'Test 12 option 4', 0, 4, true, now(), null, null);
+  ('12000000-0000-4000-8000-000000000034', '12000000-0000-4000-8000-000000000021', 'Test 12 option 4', 0, 4, true, now(), null, null),
+  ('12000000-0000-4000-8000-000000000035', '12000000-0000-4000-8000-000000000023', 'Test 12 option 5', 0, 1, true, null, null, null);
 
--- G1 is shared by I1 and I2; archived G2 is linked to I1.
+-- G1 is shared by I1 and I2; archived G2 is linked to I1; G3 is linked to I6 only.
 insert into public.menu_item_modifier_groups (menu_item_id, modifier_group_id, sort_order) values
   ('12000000-0000-4000-8000-000000000011', '12000000-0000-4000-8000-000000000021', 1),
   ('12000000-0000-4000-8000-000000000012', '12000000-0000-4000-8000-000000000021', 1),
-  ('12000000-0000-4000-8000-000000000011', '12000000-0000-4000-8000-000000000022', 2);
+  ('12000000-0000-4000-8000-000000000011', '12000000-0000-4000-8000-000000000022', 2),
+  ('12000000-0000-4000-8000-000000000016', '12000000-0000-4000-8000-000000000023', 1);
 
--- Tests 37-50: menu_public as anon (AC2, AC4).
+-- Tests 38-51: menu_public as anon (AC2, AC4).
 set local role anon;
 select pg_temp.act_anon();
 
@@ -363,7 +370,7 @@ select is(
   'a modifier option has the expected keys'
 );
 
--- Tests 51-54: direct table reads as anon follow the same rules.
+-- Tests 52-56: direct table reads as anon follow the same rules.
 select results_eq(
   $$select id from public.menu_categories where name like 'Test 12%' order by sort_order$$,
   $$values ('12000000-0000-4000-8000-000000000002'::uuid), ('12000000-0000-4000-8000-000000000001'::uuid)$$,
@@ -379,16 +386,23 @@ select is(
 select is(
   (select count(*)::int from public.modifier_groups where name like 'Test 12%'),
   1,
-  'anon reads only non-archived modifier groups'
+  'anon reads only non-archived modifier groups linked to a listed item'
 );
 
 select is(
   (select count(*)::int from public.modifier_options where name like 'Test 12%'),
   3,
-  'anon reads only non-archived modifier options, sold-out included'
+  'anon reads only non-archived options of readable groups, sold-out included'
 );
 
--- Tests 55-57: staff read every row, and menu_public still returns the public menu.
+select is(
+  (select count(*)::int from public.menu_item_modifier_groups
+    where menu_item_id::text like '12000000-%'),
+  3,
+  'anon reads only the modifier links of listed items'
+);
+
+-- Tests 57-59: staff read every row, and menu_public still returns the public menu.
 set local role authenticated;
 select pg_temp.act_as('12000000-0000-4000-8000-000000000099', 'staff');
 
@@ -410,7 +424,7 @@ select is(
   'menu_public returns the same public menu to staff'
 );
 
--- Tests 58-62: archiving hides rows from menu_public and keeps them (AC3).
+-- Tests 60-64: archiving hides rows from menu_public and keeps them (AC3).
 reset role;
 update public.menu_items set archived_at = now() where id = '12000000-0000-4000-8000-000000000012';
 
@@ -457,13 +471,15 @@ select is(
   'the archived category keeps its item rows'
 );
 
--- Test 63: a price can change after orders exist; orders keep their own price copy.
+-- Test 65: an item price can be changed. Orders keep their own price copy
+-- (order_items.unit_price) and do not reference menu_items yet, so this test creates no order.
 select lives_ok(
   $$ update public.menu_items set price_cents = 1250 where id = '12000000-0000-4000-8000-000000000011' $$,
   'an item price can be changed'
 );
 
--- Tests 64-74: constraints (AC1). Each rejected write breaks exactly one constraint.
+-- Tests 66-82: constraints (AC1 and the other menu checks). Each rejected write breaks
+-- exactly one constraint.
 select throws_ok(
   $$ insert into public.menu_items (category_id, name, price_cents)
      values ('12000000-0000-4000-8000-000000000002', 'Constraint 12 negative price', -1) $$,
@@ -538,6 +554,48 @@ select throws_ok(
      values ('12000000-0000-4000-8000-000000000002', 'Constraint 12 bad window', 100, '14:00', '10:00') $$,
   '23514', 'new row for relation "menu_items" violates check constraint "menu_items_available_window_order"',
   'a window that ends before it starts is rejected'
+);
+
+select throws_ok(
+  $$ insert into public.menu_items (category_id, name, price_cents, available_from)
+     values ('12000000-0000-4000-8000-000000000002', 'Constraint 12 half window', 100, '10:00') $$,
+  '23514', 'new row for relation "menu_items" violates check constraint "menu_items_available_window_complete"',
+  'a window with only a start time is rejected'
+);
+
+select throws_ok(
+  $$ insert into public.menu_items (category_id, name, price_cents, available_days)
+     values ('12000000-0000-4000-8000-000000000002', 'Constraint 12 no days', 100, '{}') $$,
+  '23514', 'new row for relation "menu_items" violates check constraint "menu_items_available_days_valid"',
+  'an empty weekday list is rejected (NULL means every day)'
+);
+
+select throws_ok(
+  $$ insert into public.menu_items (category_id, name, price_cents, translations)
+     values ('12000000-0000-4000-8000-000000000002', 'Constraint 12 bad translations', 100, '[]') $$,
+  '23514', 'new row for relation "menu_items" violates check constraint "menu_items_translations_is_object"',
+  'translations that are not a JSON object are rejected'
+);
+
+select throws_ok(
+  $$ insert into public.modifier_groups (name, min_select, max_select)
+     values ('Constraint 12 negative min', -1, 1) $$,
+  '23514', 'new row for relation "modifier_groups" violates check constraint "modifier_groups_min_select_non_negative"',
+  'a negative min_select is rejected'
+);
+
+select throws_ok(
+  $$ insert into public.modifier_groups (name, min_select, max_select)
+     values ('Constraint 12 zero max', 0, 0) $$,
+  '23514', 'new row for relation "modifier_groups" violates check constraint "modifier_groups_max_select_positive"',
+  'a max_select of zero is rejected'
+);
+
+select throws_ok(
+  $$ insert into public.modifier_options (modifier_group_id, name, pos_provider)
+     values ('12000000-0000-4000-8000-000000000021', 'Constraint 12 option provider without id', 'square') $$,
+  '23514', 'new row for relation "modifier_options" violates check constraint "modifier_options_pos_identity_complete"',
+  'an option POS provider without an id is rejected'
 );
 
 select * from finish();

@@ -21,7 +21,8 @@
 -- POS mapping: pos_provider reuses public.pos_type. A (pos_provider, pos_external_id) pair
 -- is unique across all rows, archived ones included, and both columns are set or both NULL.
 --
--- dietary_tags are free-form lowercase tags (for example spicy, contains-pork).
+-- dietary_tags are free-form tags (for example spicy, contains-pork); there is no fixed
+-- vocabulary yet.
 -- translations is reserved for fr-CA (Q-A2-01) and is not populated.
 --
 -- API roles (anon, authenticated, service_role) get SELECT only.
@@ -88,7 +89,8 @@ comment on column public.menu_items.translations is
 
 -- RLS: anyone sees non-archived items of published categories (sold-out included), staff
 -- see every item. The category subquery does not recurse: the menu_categories policies do
--- not read menu_items. No write policy.
+-- not read menu_items. public.menu_public repeats the category filter explicitly so staff
+-- get the same public menu; keep both. No write policy.
 alter table public.menu_items enable row level security;
 
 create policy "Anyone can view listed menu items"

@@ -1,5 +1,6 @@
 -- DATA-03: link menu items to shared modifier groups.
--- One concern: the public.menu_item_modifier_groups join table.
+-- One concern: the public.menu_item_modifier_groups join table, and the public read
+-- policy of modifier_groups that depends on it.
 --
 -- A shared group (for example Add egg, Extra rice) is defined once in
 -- public.modifier_groups and linked to each item here. sort_order orders the groups on an
@@ -25,15 +26,45 @@ create index idx_menu_item_modifier_groups_modifier_group_id
 comment on table public.menu_item_modifier_groups is
   'Links items to shared modifier groups; sort_order orders the groups on an item.';
 
--- RLS: link rows hold only id pairs and a sort order; both ends are protected by their own
--- tables' policies. No write policy.
+-- RLS: anyone sees the links of items they can see (listed items: not archived, in a
+-- visible, non-archived category); staff see every link. The item subquery applies the
+-- menu_items policies, which do not read this table. No write policy.
 alter table public.menu_item_modifier_groups enable row level security;
 
-create policy "Anyone can view menu item modifier groups"
+create policy "Anyone can view links of listed items"
   on public.menu_item_modifier_groups
   for select
   to anon, authenticated
-  using (true);
+  using (
+    exists (
+      select 1
+        from public.menu_items i
+       where i.id = menu_item_modifier_groups.menu_item_id
+    )
+  );
+
+create policy "Staff can view all menu item modifier groups"
+  on public.menu_item_modifier_groups
+  for select
+  to authenticated
+  using ((select public.is_staff()));
+
+-- The public read policy of public.modifier_groups lives here because it needs this
+-- table: a non-archived group is public while it is linked to at least one listed item.
+-- The link subquery applies the policies above, which read menu_items, whose policies read
+-- menu_categories; none of them read modifier_groups, so there is no recursion.
+create policy "Anyone can view listed modifier groups"
+  on public.modifier_groups
+  for select
+  to anon, authenticated
+  using (
+    archived_at is null
+    and exists (
+      select 1
+        from public.menu_item_modifier_groups l
+       where l.modifier_group_id = modifier_groups.id
+    )
+  );
 
 revoke all on public.menu_item_modifier_groups from anon, authenticated, service_role;
 grant select on public.menu_item_modifier_groups to anon, authenticated, service_role;
