@@ -51,7 +51,7 @@ comment on column public.modifier_options.translations is
 -- read modifier_options, so there is no recursion. No write policy.
 alter table public.modifier_options enable row level security;
 
-create policy "Anyone can view active modifier options"
+create policy "Anyone can view listed modifier options"
   on public.modifier_options
   for select
   to anon, authenticated

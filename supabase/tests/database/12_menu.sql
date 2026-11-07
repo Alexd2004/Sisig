@@ -1,13 +1,13 @@
 -- pgTAP tests for the chain-wide menu (DATA-03 AC1-AC5).
--- Tests 33-36 read the PLACEHOLDER menu from supabase/seed.sql (ids 3e000000-...) before
--- any fixture is added; test 36 is the AC2 timing check on seed data. The other tests use
+-- Tests 34-37 read the PLACEHOLDER menu from supabase/seed.sql (ids 3e000000-...) before
+-- any fixture is added; test 37 is the AC2 timing check on seed data. The other tests use
 -- fixtures with ids 12000000-... and names starting with "Test 12", and filter on them, so
 -- real menu rows added later do not break them.
 -- Runs as postgres. Roles and JWT claims are switched with SET LOCAL inside the
 -- transaction, which is rolled back at the end.
 
 begin;
-select plan(82);
+select plan(85);
 
 -- Helpers ------------------------------------------------------------------
 
@@ -158,7 +158,7 @@ select policies_are(
 
 select policies_are(
   'public', 'modifier_options',
-  array['Anyone can view active modifier options', 'Staff can view all modifier options'],
+  array['Anyone can view listed modifier options', 'Staff can view all modifier options'],
   'modifier_options has the public and staff read policies'
 );
 
@@ -402,7 +402,7 @@ select is(
   'anon reads only the modifier links of listed items'
 );
 
--- Tests 57-59: staff read every row, and menu_public still returns the public menu.
+-- Tests 57-62: staff read every row, and menu_public still returns the public menu.
 set local role authenticated;
 select pg_temp.act_as('12000000-0000-4000-8000-000000000099', 'staff');
 
@@ -419,12 +419,30 @@ select is(
 );
 
 select is(
+  (select count(*)::int from public.modifier_groups where name like 'Test 12%'),
+  3,
+  'staff read every modifier group, including archived and unlinked-to-listed ones'
+);
+
+select is(
+  (select count(*)::int from public.modifier_options where name like 'Test 12%'),
+  5,
+  'staff read every modifier option, including archived ones'
+);
+
+select is(
+  (select count(*)::int from public.menu_item_modifier_groups where menu_item_id::text like '12000000-%'),
+  4,
+  'staff read every modifier link, including links of unlisted items'
+);
+
+select is(
   pg_temp.ids(public.menu_public() -> 'categories', '12000000-'),
   array['12000000-0000-4000-8000-000000000002', '12000000-0000-4000-8000-000000000001'],
   'menu_public returns the same public menu to staff'
 );
 
--- Tests 60-64: archiving hides rows from menu_public and keeps them (AC3).
+-- Tests 63-67: archiving hides rows from menu_public and keeps them (AC3).
 reset role;
 update public.menu_items set archived_at = now() where id = '12000000-0000-4000-8000-000000000012';
 
@@ -471,14 +489,14 @@ select is(
   'the archived category keeps its item rows'
 );
 
--- Test 65: an item price can be changed. Orders keep their own price copy
+-- Test 68: an item price can be changed. Orders keep their own price copy
 -- (order_items.unit_price) and do not reference menu_items yet, so this test creates no order.
 select lives_ok(
   $$ update public.menu_items set price_cents = 1250 where id = '12000000-0000-4000-8000-000000000011' $$,
   'an item price can be changed'
 );
 
--- Tests 66-82: constraints (AC1 and the other menu checks). Each rejected write breaks
+-- Tests 69-85: constraints (AC1 and the other menu checks). Each rejected write breaks
 -- exactly one constraint.
 select throws_ok(
   $$ insert into public.menu_items (category_id, name, price_cents)
