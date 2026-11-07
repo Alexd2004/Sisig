@@ -1,21 +1,26 @@
 -- pgTAP tests for versioned loyalty settings and public.current_loyalty_settings (DATA-04 AC3).
--- Two far-future versions are added as fixtures: V2 starts 2999-01-01 and V3 2999-01-11.
--- The tests compare against the version in effect now, captured before the fixtures, so they
--- keep passing once real versions are added (LOY-06).
+-- Fixtures: V1 starts at now() (the transaction start time, fixed for the whole transaction),
+-- V2 at 2999-01-01 and V3 at 2999-01-11. Real versions added later (LOY-06) start before
+-- 2999 and do not collide with now(), so the tests keep passing once they exist.
 
 begin;
 select plan(13);
 
--- The version in effect now, read straight from the table (latest effective_from at or
--- before now()). Today that is the -infinity baseline.
-create temp table settings_08_now as
+-- Fixtures: plain inserts, not assertions. V1 is the latest version that has started.
+insert into public.loyalty_settings
+  (id, effective_from, label, points_per_dollar, purchase_age_limit_days, redemption_code_ttl_minutes)
+values
+  ('08000000-0000-4000-8000-000000000001', now(), 'test version 1', 1, 14, 15);
+
+-- The latest version that starts before 2999-01-01, read straight from the table: V1, or a
+-- real version scheduled after now(). Captured before V2 and V3 exist, for test 4.
+create temp table settings_08_before_v2 as
   select id
     from public.loyalty_settings
-   where effective_from <= now()
+   where effective_from < '2999-01-01 00:00:00+00'
    order by effective_from desc
    limit 1;
 
--- Fixtures: plain inserts, not assertions.
 insert into public.loyalty_settings
   (id, effective_from, label, points_per_dollar, purchase_age_limit_days, redemption_code_ttl_minutes)
 values
@@ -36,8 +41,8 @@ select is(
 -- Tests 2-7: the version in effect at, before and after each boundary.
 select is(
   (public.current_loyalty_settings()).id,
-  (select id from settings_08_now),
-  'with no argument (now), the latest version that has started is in effect'
+  '08000000-0000-4000-8000-000000000001'::uuid,
+  'with no argument the time is now(), so version 1, which starts at now(), is in effect'
 );
 
 select is(
@@ -48,8 +53,8 @@ select is(
 
 select is(
   (public.current_loyalty_settings('2999-01-01 00:00:00+00'::timestamptz - interval '1 microsecond')).id,
-  (select id from settings_08_now),
-  'one microsecond before version 2 starts, the earlier version is still in effect'
+  (select id from settings_08_before_v2),
+  'one microsecond before version 2 starts, the version before it is still in effect'
 );
 
 select is(
