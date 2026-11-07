@@ -127,9 +127,10 @@ describe('domain errors', () => {
   });
 
   describe('catalogue', () => {
-    it('has the 13 DATA-13 codes', () => {
-      expect([...DOMAIN_ERROR_CODES].sort()).toEqual(
-        [
+    // Codes are append-only, so this checks the DATA-13 set is still present, not the full list.
+    it('still holds the 13 DATA-13 codes', () => {
+      expect(DOMAIN_ERROR_CODES).toEqual(
+        expect.arrayContaining([
           'ALREADY_REDEEMED',
           'AUTH_REAUTH_REQUIRED',
           'CLAIM_EXPIRED',
@@ -143,7 +144,7 @@ describe('domain errors', () => {
           'RATE_LIMITED',
           'REWARD_INACTIVE',
           'STORE_CLOSED',
-        ].sort()
+        ])
       );
     });
 

@@ -36,6 +36,17 @@ function latestCatalogMigration(): { file: string; sql: string } {
   if (!latest) {
     throw new Error(`No migration in ${MIGRATIONS_DIR} defines private.app_error_catalog()`);
   }
+  // A later drop, rename or plain `create function` would leave this test reading a stale list.
+  const found = latest;
+  const later = files.filter((name) => name > found.file);
+  for (const file of later) {
+    if (/app_error_catalog/i.test(fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8'))) {
+      throw new Error(
+        `${file} mentions app_error_catalog after ${found.file} but does not ` +
+          '`create or replace function private.app_error_catalog(`; update this drift test.'
+      );
+    }
+  }
   return latest;
 }
 
@@ -79,9 +90,10 @@ describe('error code drift (TS <-> SQL <-> Edge Functions)', () => {
     );
   });
 
-  it('the Edge Function list has exactly the TS codes, in the same order', () => {
+  it('the Edge Function list has exactly the TS codes', () => {
     const codes = edgeCodes(fs.readFileSync(EDGE_ERRORS_FILE, 'utf8'));
-    expect(codes).toEqual([...DOMAIN_ERROR_CODES]);
+    expect(new Set(codes).size).toBe(codes.length);
+    expect([...codes].sort()).toEqual([...DOMAIN_ERROR_CODES].sort());
   });
 });
 

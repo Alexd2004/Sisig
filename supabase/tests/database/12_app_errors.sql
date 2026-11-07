@@ -76,12 +76,13 @@ select has_function('private', 'app_error_catalog', array[]::name[], 'private.ap
 select has_function('private', 'raise_app_error', array['text', 'jsonb']::name[], 'private.raise_app_error(text, jsonb) exists');
 select has_function('public', 'raise_sample_error', array[]::name[], 'public.raise_sample_error() exists');
 
--- Tests 4-6: the catalogue holds 13 codes with distinct, well-formed SQLSTATEs.
-select is((select count(*)::int from private.app_error_catalog()), 13, 'the catalogue holds 13 codes');
+-- Tests 4-6: the catalogue holds at least the 13 DATA-13 codes (codes are append-only), each
+-- with its own well-formed SQLSTATE. The exact list is checked by the Jest drift test.
+select cmp_ok((select count(*)::int from private.app_error_catalog()), '>=', 13, 'the catalogue holds at least the 13 DATA-13 codes');
 
 select is(
   (select count(distinct sqlstate)::int from private.app_error_catalog()),
-  13,
+  (select count(*)::int from private.app_error_catalog()),
   'every code has its own SQLSTATE'
 );
 

@@ -15,7 +15,10 @@ RLS, `SECURITY DEFINER`) are in [supabase/CONVENTIONS.md](../../supabase/CONVENT
 
 ## Idempotency keys
 
-- Every write RPC that must not run twice takes `p_idempotency_key uuid`.
+- Every write RPC that must not run twice takes `p_idempotency_key text`
+  holding a client-generated UUID. Existing `idempotency_key` columns
+  (`points_ledger`, `reward_redemptions`) are `text`, so the key is stored as
+  its canonical lowercase UUID string.
 - The client creates the key once per **user intent** (for example one tap on
   "Redeem") with `crypto.randomUUID()` (`expo-crypto` on mobile), and keeps it
   for the life of that intent.
@@ -30,11 +33,14 @@ RLS, `SECURITY DEFINER`) are in [supabase/CONVENTIONS.md](../../supabase/CONVENT
 
 - Lists use keyset pagination on `(created_at, id)`, newest first:
   `order by created_at desc, id desc`.
-- The next page is requested with the last row's pair:
-  `where (created_at, id) < (p_cursor_created_at, p_cursor_id)`, plus
-  `p_limit`. Back it with an index on `(…, created_at desc, id desc)`.
+- The next page is requested with the last row's pair as two arguments,
+  `p_cursor_created_at` and `p_cursor_id` (both null for the first page), plus
+  `p_limit`:
+  `where (created_at, id) < (p_cursor_created_at, p_cursor_id)`.
+  Back it with an index on `(…, created_at desc, id desc)`.
 - No `offset` pagination: it skips or repeats rows while new rows arrive.
-- The client treats the cursor as opaque and passes it back unchanged.
+- The client copies both values from the last row it received, unchanged
+  (`created_at` as the exact ISO string the server sent).
 
 ## Timestamps
 
@@ -135,6 +141,11 @@ with the status in the table. Domain codes are UPPER_SNAKE; the older
 transport codes (`bad_request`, `unauthorized`, ...) stay lower_snake. The
 client reads the body with `normalizeErrorAsync`.
 
+Edge Function domain errors carry no `context` (the envelope has only `code`
+and `message`), so `DomainError.context` is `{}` for them. Only SQL errors
+carry context today. Add a `context` field to the envelope when a function
+first needs one.
+
 ### Handling in the client
 
 ```ts
@@ -165,12 +176,16 @@ Codes are append-only: never rename one or reuse a SQLSTATE. To add one:
    with the full list. Never edit the old migration.
 3. Add it to `DOMAIN_ERROR_CODES` and `DOMAIN_ERROR_STATUS` in
    `supabase/functions/_shared/errors.ts`.
-4. Add a row to the table above.
+4. Add a row to the table above (documentation only; nothing checks it).
+5. If the code is raised from a new SQL function, its own pgTAP test asserts
+   `throws_ok(..., '<SQLSTATE>', '<CODE>', ...)`. A mistyped code fails only at
+   run time, with `22023`, which the client shows as `DATABASE_ERROR`.
 
 `src/error-codes-drift.test.ts` fails until steps 1 to 3 agree. It reads the
 latest migration that defines `private.app_error_catalog()`, so it runs without
-a database. `supabase/tests/database/12_app_errors.sql` checks that each code
-really raises its SQLSTATE.
+a database. `supabase/tests/database/12_app_errors.sql` loops over the catalogue and checks
+that each code really raises its SQLSTATE, and `src/domain-errors.test.ts`
+checks every entry's format. Neither repeats the list, so neither needs editing.
 
 ### Sample RPC
 

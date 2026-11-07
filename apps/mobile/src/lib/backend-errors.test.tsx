@@ -3,7 +3,11 @@ import { QueryClientProvider, useMutation } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { createQueryClient, isDomainError, normalizeError, type AppError } from '@sisig/api';
 
-// DATA-13 AC1: what supabase-js resolves for `supabase.rpc('raise_sample_error')`.
+// DATA-13 AC1 integration check: a backend domain error reaches a mobile mutation hook as a
+// typed DomainError through the built @sisig/api package. There is no module under test in
+// src/lib; the hook below is the pattern RPC hooks follow (LOY-01 adds the real ones).
+//
+// What supabase-js resolves for `supabase.rpc('raise_sample_error')`.
 // PostgREST returns the Postgres error fields; the raw message must never reach the UI.
 const rpc = jest.fn(async (_fn: 'raise_sample_error') => ({
   data: null,
@@ -18,6 +22,8 @@ const rpc = jest.fn(async (_fn: 'raise_sample_error') => ({
 // The pattern every RPC mutation follows: throw normalizeError(error).
 function useRaiseSampleError() {
   return useMutation<void, AppError>({
+    // No cache timer left running after the test (TanStack's default gcTime is 5 minutes).
+    gcTime: 0,
     mutationFn: async () => {
       const { error } = await rpc('raise_sample_error');
       if (error) {
@@ -33,7 +39,7 @@ describe('backend domain errors in the mobile client', () => {
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
-    const { result } = renderHook(() => useRaiseSampleError(), { wrapper });
+    const { result, unmount } = renderHook(() => useRaiseSampleError(), { wrapper });
 
     act(() => {
       result.current.mutate();
@@ -50,6 +56,7 @@ describe('backend domain errors in the mobile client', () => {
     expect(error.message).toBe("You don't have enough points for this reward");
     expect(error.message).not.toContain('SS001');
     expect(rpc).toHaveBeenCalledTimes(1); // mutations never retry
+    unmount();
     queryClient.clear();
   });
 });
