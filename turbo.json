@@ -27,6 +27,12 @@
       "cache": false
     },
     "format:check": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/prettier.config.js",
+        "$TURBO_ROOT$/.prettierignore",
+        "$TURBO_ROOT$/packages/config/prettier.config.js"
+      ],
       "cache": true
     },
     "typecheck": {
