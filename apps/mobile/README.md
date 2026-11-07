@@ -59,7 +59,7 @@ pnpm -F @sisig/mobile exec expo run:ios
 
 ### Generated native folders
 
-`expo run:android` and `expo run:ios` generate `apps/mobile/android` and `apps/mobile/ios`. They are local build output. Do not commit them.
+`expo run:android` and `expo run:ios` generate `apps/mobile/android` and `apps/mobile/ios`. They are local build output and are git-ignored. Prebuild also adds `android` and `ios` scripts to `package.json`; do not commit that change.
 
 ### When to rebuild the dev client
 
@@ -67,7 +67,7 @@ Rebuild with `expo run:android` after you add or upgrade a package with native c
 
 ### Release builds
 
-Not configured. The `build` script runs `expo build`, which the local Expo CLI rejects, and there is no `eas.json`. Store builds through EAS are planned (DEVOPS-04).
+Not configured. The app has no `build` script (root `pnpm build` skips it; CI checks the bundle with `expo export`), and there is no `eas.json`. Store builds through EAS are planned (DEVOPS-04).
 
 ## Environment Variables
 

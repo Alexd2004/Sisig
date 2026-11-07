@@ -206,7 +206,7 @@ pnpm turbo run build --filter='@sisig/mobile^...'
 
 The filter `@sisig/mobile^...` means "every workspace package the mobile app depends on, but not the app itself". Each package compiles with `tsc` into its `dist/` folder. Without this step Metro cannot resolve `@sisig/ui` and the bundle fails.
 
-Do not run plain `pnpm build` for this. It also runs the mobile app's `build` script (`expo build`), which the local Expo CLI rejects.
+Plain `pnpm build` also works. It builds the same packages plus the admin placeholder, and skips the mobile app, which has no `build` script.
 
 ### 8. Start the emulator and wait for it to boot
 
@@ -236,7 +236,7 @@ The first run takes a while. It:
 2. Builds the debug app with Gradle (the first build downloads Gradle, the NDK and CMake).
 3. Installs the dev client on the emulator, starts Metro on port 8081 and opens the app.
 
-**Do not commit the generated files.** Prebuild output is not in `.gitignore` yet: `git status` shows `apps/mobile/android/` (and `apps/mobile/ios/`, if you ever ran `expo run:ios` or a plain `expo prebuild`) as untracked, and `apps/mobile/package.json` as modified. Leave them out of your commits: stage files by name instead of `git add -A`, and undo the script change with `git restore apps/mobile/package.json` when you need a clean tree.
+**Do not commit the script change.** `apps/mobile/android/` (and `apps/mobile/ios/`, if you ever ran `expo run:ios` or a plain `expo prebuild`) is git-ignored, so it does not show up in `git status`. `apps/mobile/package.json` does show as modified. Leave it out of your commits: stage files by name instead of `git add -A`, and undo the script change with `git restore apps/mobile/package.json` when you need a clean tree.
 
 When the app opens on the emulator, setup is done.
 
@@ -392,7 +392,7 @@ The next build recreates the folder and takes longer.
 
 ### `expo-doctor` reports native project folders
 
-After prebuild, `pnpm -F @sisig/mobile run doctor` also warns that `app.json` properties will not sync because `android/` and `ios/` exist. That warning comes from the generated folders on your machine. A clean clone has three other known failures, listed in the [README](../README.md#known-issues).
+`expo-doctor` warns that `app.json` properties will not sync only when `android/` or `ios/` exists and is not git-ignored. Both folders are in `.gitignore`, so after prebuild `pnpm -F @sisig/mobile run doctor` should not show that warning. If it does, check that you have not removed the `.gitignore` entries. A clean clone has three other known failures, listed in the [README](../README.md#known-issues).
 
 ### iOS
 

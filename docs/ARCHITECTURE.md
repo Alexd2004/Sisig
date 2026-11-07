@@ -80,7 +80,7 @@ Solid arrows are in use on `main`. Dotted arrows are code that exists but nothin
 
 | Workspace | Build script | Workspace dependencies |
 |-----------|--------------|------------------------|
-| `@sisig/mobile` | `expo build` (the local Expo CLI rejects it; release builds are planned, DEVOPS-04) | `@sisig/ui`, `@sisig/api`, `@sisig/claude`; `@sisig/config` (dev) |
+| `@sisig/mobile` | none (Turborepo skips it; CI bundles it with `expo export`, and release builds are planned, DEVOPS-04) | `@sisig/ui`, `@sisig/api`, `@sisig/claude`; `@sisig/config` (dev) |
 | `@sisig/admin` | echo placeholder | `@sisig/config` (dev) |
 | `@sisig/ui` | `tsc` to `dist/` | `@sisig/config` (dev) |
 | `@sisig/api` | `tsc` to `dist/` | `@sisig/config` (dev) |
@@ -128,7 +128,7 @@ There is no `metro.config.js`. Expo's default Metro config (from `expo/metro-con
 pnpm turbo run build --filter='@sisig/mobile^...'
 ```
 
-The `^...` suffix selects every workspace the mobile app depends on, but not the app itself, whose `build` script would fail. After you pull new dependencies, restart Metro with `--clear`. CI runs the same build before it bundles the app with `expo export --platform android` (added in PR #16).
+The `^...` suffix selects every workspace the mobile app depends on, but not the app itself, which has no `build` script. After you pull new dependencies, restart Metro with `--clear`. CI runs the same build before it bundles the app with `expo export --platform android` (added in PR #16).
 
 ```mermaid
 flowchart TB
@@ -616,8 +616,8 @@ The team runs the app on an Android emulator against the hosted Supabase dev pro
 
 ### Mobile App
 
-1. **Local dev client.** `pnpm -F @sisig/mobile exec expo run:android` builds a debug app with a native project, installs it on the emulator or device, and starts Metro. `expo run:ios` does the same on iOS but needs Xcode, and has not been set up. Both commands generate `apps/mobile/android` and `apps/mobile/ios`. Those folders are local build output and are not committed.
-2. **Release builds.** Not configured. The local Expo CLI rejects `expo build`, and there is no `eas.json`. App Store and Play Store builds through EAS (Expo Application Services) are planned (DEVOPS-04).
+1. **Local dev client.** `pnpm -F @sisig/mobile exec expo run:android` builds a debug app with a native project, installs it on the emulator or device, and starts Metro. `expo run:ios` does the same on iOS but needs Xcode, and has not been set up. Both commands generate `apps/mobile/android` and `apps/mobile/ios`. Those folders are local build output, git-ignored and not committed.
+2. **Release builds.** Not configured. The app has no `build` script, and there is no `eas.json`. App Store and Play Store builds through EAS (Expo Application Services) are planned (DEVOPS-04).
 
 ### Database
 

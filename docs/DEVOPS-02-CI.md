@@ -81,9 +81,10 @@ Step 9 has been in the job since the first DEVOPS-02 pipeline. PR #16 added step
   1. **gitleaks scan:** `gitleaks/gitleaks-action@v2` with default rules, on the full history (`fetch-depth: 0`). Fails on a detected key or token.
   2. **Service-role key or JWT pattern:** `git grep -F` for the HS256 JWT header `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9` in `apps/` and `packages/`.
   3. **Anthropic API key pattern:** `git grep -E` for `sk-ant-` followed by 20 or more key characters in `apps/` and `packages/`. Placeholders such as `sk-ant-...` in the READMEs do not match. `ANTHROPIC_API_KEY` itself is not checked, because client code references it legitimately.
-  4. **`SUPABASE_SERVICE_ROLE_KEY` references:** `git grep -F` for that name in `apps/` and `packages/`.
+  4. **Supabase secret key pattern:** `git grep -E` for `sb_secret_` followed by 20 or more key characters in `apps/` and `packages/`. This is the new-style secret key, which replaces the legacy service-role JWT. Text that mentions the prefix, such as `sb_secret_...`, does not match.
+  5. **`SUPABASE_SERVICE_ROLE_KEY` references:** `git grep -F` for that name in `apps/` and `packages/`.
 
-  Checks 2 to 4 pass only when `git grep` exits 1 (no match). A match (exit 0) and any other exit code (a grep error) both fail. The JWT header in check 2 matches every HS256 JWT, including Supabase's legacy anon key, so Supabase keys must come from environment configuration (`apps/mobile/.env.local`), never from source.
+  Checks 2 to 5 pass only when `git grep` exits 1 (no match). A match (exit 0) and any other exit code (a grep error) both fail. The JWT header in check 2 matches every HS256 JWT, including Supabase's legacy anon key, so Supabase keys must come from environment configuration (`apps/mobile/.env.local`), never from source.
 
 ### 2. Edge Functions (`.github/workflows/edge-functions.yml`)
 
@@ -165,6 +166,7 @@ The database jobs need Docker, and the first `pnpm db:start` pulls the Supabase 
    ```bash
    git grep -n -I -F -e "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" -e "SUPABASE_SERVICE_ROLE_KEY" -- apps packages
    git grep -n -I -E -e "sk-ant-[A-Za-z0-9_-]{20,}" -- apps packages
+   git grep -n -I -E -e "sb_secret_[A-Za-z0-9_-]{20,}" -- apps packages
    ```
 
    `git grep` searches tracked files only, so stage new files before you run it. No output means clean.
@@ -209,7 +211,7 @@ A secret that reached a commit stays in git history. Rotate it first, then remov
 
 **Service-role key or reference found**
 
-Move the value to a server-side Edge Function or to environment configuration. `SUPABASE_SERVICE_ROLE_KEY` must not appear in `apps/` or `packages/`.
+Move the value to a server-side Edge Function or to environment configuration. `SUPABASE_SERVICE_ROLE_KEY` and `sb_secret_` keys must not appear in `apps/` or `packages/`. If a real secret key was committed, rotate it in the Supabase dashboard first (see Secret detected).
 
 ## Performance
 
@@ -247,7 +249,7 @@ If a job fails for a reason unrelated to the change (rare flakiness), open the P
 ## Expansion (Future)
 
 ### DEVOPS-04: Build & Deploy
-- `pnpm build` for the mobile and admin apps (today the mobile `build` script is `expo build`, which the local Expo CLI rejects)
+- `pnpm build` for the mobile and admin apps (today the mobile app has no `build` script, so Turborepo skips it, and the admin `build` is a placeholder)
 - `eas build` cloud builds (EAS CLI; not configured yet, there is no `eas.json`)
 - Deploy to Vercel (admin) and to the App Store and Play Store (mobile)
 
@@ -261,7 +263,7 @@ CI tests migrations on a throwaway local database only. Nothing applies them to 
 
 - **Branch protection is not configured.** Until it is, none of these checks blocks a merge.
 - **Merge methods are not restricted.** The repository still allows merge commits and rebase merges next to squash merges, and does not delete head branches after merge.
-- **`pnpm format:check` is not run in CI.** It fails on `main` today. Checked on 2026-11-06, Prettier reports 14 files in `packages/api`, 10 in `packages/claude`, 13 in `packages/ui` and 53 in `apps/mobile`. Prettier finds no config file for those sources (`prettier --find-config-path` reports none; the shared `packages/config/prettier.config.js` is not referenced), so it checks them against its defaults. CONTRIBUTING.md does not list it as a required check.
+- **`pnpm format:check` is not run in CI.** It passes locally (checked on 2026-11-06). The root `prettier.config.js` re-exports the shared `packages/config/prettier.config.js`, so every workspace that runs Prettier uses it. Each package's `format` and `format:check` scripts pass `--ignore-path ../../.prettierignore`, because Prettier reads `.prettierignore` only from the folder it runs in. The root `.prettierignore` excludes the generated `packages/api/src/database.types.ts` and `supabase/functions` (formatted by `deno fmt`). CONTRIBUTING.md does not list `format:check` as a required check.
 - **Behavioural RLS coverage is partial.** `supabase/tests/database/` has 11 files. `01_init.sql` and `02_identity.sql` are structural: they check that tables, columns, functions, constraints and policy names exist. The other nine also run statements and assert the results, and five of them (`03`, `06`, `09`, `10`, `11`) switch roles with `set local role` to test RLS as `anon`, `authenticated` or `service_role`. Behavioural RLS tests for every table belong to DATA-08.
 - **The `db lint` gate found real problems on its first run.** On commit 45398aa the `database` job failed on `public.set_user_role`, which raised the invalid error code `PERM` (fixed by forward-only migration `20261029120000_fix_set_user_role_error_codes.sql`). The same run reported nine findings from pgTAP's own functions in the `extensions` schema, so the lint covers `public,private` only.
 - **No affected-only runs.** Turborepo runs every task on every PR.

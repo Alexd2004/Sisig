@@ -127,12 +127,12 @@ These five CI jobs run on every PR into `main` and must all pass before merge:
 | `lint-and-test` | `ci.yml` | `pnpm lint`, `pnpm typecheck`, `pnpm test`, `expo install --check`, package build, Android `expo export` |
 | `database` | `ci.yml` | Local Supabase (migrations and seed), `pnpm db:test` (pgTAP), `pnpm db:lint` |
 | `types-drift` | `ci.yml` | `pnpm db:types`; fails if `packages/api/src/database.types.ts` changes |
-| `secrets` | `ci.yml` | gitleaks, plus greps for JWTs, service-role key references and Anthropic keys in `apps/` and `packages/` |
+| `secrets` | `ci.yml` | gitleaks, plus greps for JWTs, service-role key references, Anthropic keys and Supabase secret keys (`sb_secret_`) in `apps/` and `packages/` |
 | `deno-tests` | `edge-functions.yml` | `deno test`, `deno fmt --check`, `deno lint` on `supabase/functions` |
 
 Branch protection does not enforce them yet (see Branch Protection), so check the PR's status before you merge. Details: [docs/DEVOPS-02-CI.md](docs/DEVOPS-02-CI.md).
 
-`pnpm format:check` is not one of the checks. It fails on `main` today (see [docs/DEVOPS-02-CI.md](docs/DEVOPS-02-CI.md#known-gaps)).
+`pnpm format:check` is not one of the checks (see [docs/DEVOPS-02-CI.md](docs/DEVOPS-02-CI.md#known-gaps)). It passes, so run `pnpm format` before you push to keep it that way.
 
 ### Running Locally
 
@@ -152,7 +152,7 @@ The app runs in a development build (dev client), not Expo Go. Setup, the daily 
 
 Two rules that affect PRs:
 
-- `expo run:android` generates `apps/mobile/android/` and adds `android` and `ios` scripts to `apps/mobile/package.json`. These are not git-ignored yet. Do not commit them.
+- `expo run:android` generates `apps/mobile/android/` and adds `android` and `ios` scripts to `apps/mobile/package.json`. The folders are git-ignored. The `package.json` change is not: do not commit it.
 - Keep test files out of `apps/mobile/app/`. Expo Router turns every file there into a route, and a test bundled as a screen crashes the app.
 
 ## Data Layer

@@ -138,8 +138,9 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=<the project's publishable key, sb_publishable_...
   the host's `127.0.0.1`; see [LOCAL-DEVELOPMENT.md](LOCAL-DEVELOPMENT.md).
 - Only the publishable (anon) key goes here. The secret or service-role key must never reach
   the app. CI's `secrets` job greps `apps/` and `packages/` for HS256 JWTs (the legacy key
-  format) and for the name `SUPABASE_SERVICE_ROLE_KEY`. It has no rule for `sb_secret_`
-  keys, so do not rely on it to catch one.
+  format), for `sb_secret_` keys (the prefix followed by 20 or more key characters) and
+  for the name `SUPABASE_SERVICE_ROLE_KEY`. gitleaks also runs, but a key that reached a
+  commit stays in history: rotate it.
 - `apps/mobile/src/lib/supabase.ts` throws at launch if either value is missing.
 - Expo inlines `EXPO_PUBLIC_*` values when it bundles the app, so restart the dev server
   after you change the file.
@@ -993,8 +994,8 @@ fails if the file differs from the committed copy. It prints the diff. Without D
 can apply that diff by hand. Commit the regenerated file in the same PR as the schema
 change.
 
-Do not edit or format the file. `pnpm format` runs `prettier --write src` in
-`packages/api`, which would rewrite it and fail `types-drift`.
+Do not edit or format the file by hand. The root `.prettierignore` lists it, so `pnpm format`
+leaves it alone. Running Prettier on it directly would rewrite it and fail `types-drift`.
 
 Things to know about the types:
 

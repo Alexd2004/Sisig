@@ -91,14 +91,16 @@ Run these from the repo root.
 | `pnpm typecheck` | `tsc --noEmit` in every workspace (builds dependencies first) |
 | `pnpm test` | Jest in every workspace |
 | `pnpm format` | Prettier, writing changes |
-| `pnpm format:check` | Prettier check without changes (fails today; see [Known Issues](#known-issues)) |
+| `pnpm format:check` | Prettier check without changes (not run in CI) |
 | `pnpm -F @sisig/mobile run doctor` | Run `expo-doctor` on the mobile app |
 | `pnpm db:start`, `pnpm db:reset`, `pnpm db:test`, `pnpm db:lint`, `pnpm db:types`, `pnpm db:new <name>` | Local Supabase commands (need Docker); see [supabase/README.md](supabase/README.md) |
+| `pnpm build` | Build every workspace that has a `build` script: `tsc` for the shared packages, a placeholder for the admin app. The mobile app has none (see Notes) |
 | `pnpm docs:pdf` | Regenerate the PDFs in `docs/pdf/`; see [docs/README.md](docs/README.md) |
 
 Notes:
 
-- `pnpm build` is not usable yet. It also runs the mobile app's `build` script (`expo build`), which the local Expo CLI rejects. Release builds need EAS, which is not set up (DEVOPS-04).
+- The mobile app has no `build` script, so `pnpm build` skips it. CI checks the JS bundle with `expo export`. Release builds need EAS, which is not set up (DEVOPS-04).
+- Prettier reads the shared config in `packages/config/prettier.config.js` through the root `prettier.config.js`. `packages/api/src/database.types.ts` is generated and listed in `.prettierignore`, so `pnpm format` leaves it alone.
 - Plain `pnpm doctor` runs pnpm's own checker, not `expo-doctor`, because `doctor` is a built-in pnpm command. Use `run doctor` as shown.
 - `pnpm test --watch` does not work at the root: pnpm rejects `--watch`. Pass it to Jest in one package: `pnpm -F @sisig/mobile test -- --watch`.
 
@@ -107,7 +109,7 @@ Notes:
 The app runs in its own development build, made with `expo-dev-client` (listed under `plugins` in `apps/mobile/app.json`). This is the team's chosen workflow; Expo Go is not supported. Some native packages are declared in `apps/mobile/package.json` (`@sentry/react-native`, `lottie-react-native`, `react-native-gesture-handler`, `expo-device`) but no code imports them yet.
 
 - Build and install it with `expo run:android`. Rebuild it only when native code changes: a dependency with native code, or `apps/mobile/app.json`.
-- `expo run:android` generates `apps/mobile/android/` and adds `android` and `ios` scripts to `apps/mobile/package.json`. These are not git-ignored yet. Do not commit them.
+- `expo run:android` generates `apps/mobile/android/` and adds `android` and `ios` scripts to `apps/mobile/package.json`. The `android/` and `ios/` folders are git-ignored. The `package.json` change is not: do not commit it.
 - `pnpm -F @sisig/mobile exec expo run:ios` needs the full Xcode app and is not set up on the team's Mac.
 
 Details and troubleshooting: [docs/LOCAL-DEVELOPMENT.md](docs/LOCAL-DEVELOPMENT.md).
@@ -157,7 +159,7 @@ Every pull request into `main`, and every push to `main`, runs two workflows in 
 | `lint-and-test` | ESLint, `tsc --noEmit`, Jest, `expo install --check`, package build, Android `expo export` bundle |
 | `database` | Local Supabase start (migrations and seed), pgTAP tests, `supabase db lint` |
 | `types-drift` | `pnpm db:types`; fails if `packages/api/src/database.types.ts` changes |
-| `secrets` | gitleaks, plus greps for JWTs, service-role key references and Anthropic keys in `apps/` and `packages/` |
+| `secrets` | gitleaks, plus greps for JWTs, service-role key references, Anthropic keys and Supabase secret keys (`sb_secret_`) in `apps/` and `packages/` |
 | `deno-tests` | Edge Function tests, `deno fmt --check`, `deno lint` |
 
 Branch protection on `main` is not configured yet, so GitHub does not block a merge when a check fails. The team rule is to merge only when all five pass. Job details, local commands and fixes for common failures are in [docs/DEVOPS-02-CI.md](docs/DEVOPS-02-CI.md).
@@ -172,14 +174,12 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for trunk-based development, branch names
 
 Checked on 2026-11-06:
 
-- **`pnpm format:check` fails** in `packages/api`, `packages/claude`, `packages/ui` and `apps/mobile`. It is not run in CI. See [docs/DEVOPS-02-CI.md](docs/DEVOPS-02-CI.md#known-gaps).
+- **`pnpm format:check` is not run in CI.** It passes locally. See [docs/DEVOPS-02-CI.md](docs/DEVOPS-02-CI.md#known-gaps).
 - **`expo-doctor` fails three checks** on a clean clone (`pnpm -F @sisig/mobile run doctor`):
   - `app.json`: `ios.supportsTabletMode` is not an allowed property.
   - `@types/react-native` is installed directly, but `react-native` ships its own types.
   - Missing peer dependency `expo-application`, required by `sentry-expo`.
-
-  After `expo run:android`, it also warns about the generated native folders. That warning is local only.
-- **Prebuild output is not git-ignored.** `apps/mobile/android/`, `apps/mobile/ios/` and the scripts prebuild adds to `apps/mobile/package.json` show up in `git status`.
+- **Prebuild edits `apps/mobile/package.json`.** It adds `android` and `ios` scripts, which show up in `git status`. Undo them with `git restore apps/mobile/package.json`. The generated `apps/mobile/android/` and `apps/mobile/ios/` folders are git-ignored.
 - **iOS is not verified.** The Android dev client was built and run on an emulator on 2026-11-06. `expo run:ios` has not been run, because the team's Mac has no full Xcode.
 - **Branch protection is not configured** on `main` (see [CONTRIBUTING.md](CONTRIBUTING.md#branch-protection)).
 

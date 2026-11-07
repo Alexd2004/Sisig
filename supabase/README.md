@@ -200,7 +200,7 @@ curl -H "Authorization: Bearer <access_token>" http://127.0.0.1:54321/functions/
 `authConfigFromEnv()` reads `SUPABASE_URL` and `SUPABASE_ANON_KEY`, which Supabase
 sets for functions. Never put the service-role key in a function that a client
 can reach, and never in the mobile or admin apps. CI's `secrets` job greps
-`apps/` and `packages/` (not `supabase/`) for JWTs and for
+`apps/` and `packages/` (not `supabase/`) for JWTs, `sb_secret_` keys and
 `SUPABASE_SERVICE_ROLE_KEY`.
 
 ## Troubleshooting
