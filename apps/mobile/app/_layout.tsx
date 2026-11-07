@@ -3,18 +3,27 @@ import { Stack, router, useGlobalSearchParams, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import { Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { AppThemeProvider } from '../src/components/AppThemeProvider';
 import { SessionProvider, useSession, type SessionStatus } from '../src/session/session';
+import { createSupabaseSessionSource } from '../src/session/supabase-source';
+import { persistOptions } from '../src/lib/query-persistence';
+import { queryClient, supabase } from '../src/lib/supabase';
 import { resolveAuthRedirect } from '../src/navigation/auth-gate';
 
 SplashScreen.preventAutoHideAsync();
 
+// Created once for the app's lifetime, so SessionProvider subscribes to Supabase once.
+const sessionSource = createSupabaseSessionSource(supabase, queryClient);
+
 export default function RootLayout(): JSX.Element {
   return (
     <AppThemeProvider>
-      <SessionProvider>
-        <RootNavigator />
-      </SessionProvider>
+      <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
+        <SessionProvider source={sessionSource}>
+          <RootNavigator />
+        </SessionProvider>
+      </PersistQueryClientProvider>
     </AppThemeProvider>
   );
 }

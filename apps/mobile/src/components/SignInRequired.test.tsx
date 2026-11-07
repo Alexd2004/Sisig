@@ -13,6 +13,7 @@ jest.mock('expo-router', () => ({
 function sourceWithStatus(status: 'signed-in' | 'signed-out'): SessionSource {
   return {
     restore: () => Promise.resolve(status),
+    subscribe: () => () => undefined,
     signOut: () => Promise.resolve(),
   };
 }
