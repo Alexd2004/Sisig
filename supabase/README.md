@@ -199,9 +199,11 @@ curl -H "Authorization: Bearer <access_token>" http://127.0.0.1:54321/functions/
 
 `authConfigFromEnv()` reads `SUPABASE_URL` and `SUPABASE_ANON_KEY`, which Supabase
 sets for functions. Never put the service-role key in a function that a client
-can reach, and never in the mobile or admin apps. CI's `secrets` job greps
-`apps/` and `packages/` (not `supabase/`) for JWTs and for
-`SUPABASE_SERVICE_ROLE_KEY`.
+can reach, and never in the mobile or admin apps. CI's `secrets` job runs
+gitleaks over the whole repo, then greps `apps/` and `packages/` for one fixed
+string, the HS256 JWT header (the legacy key format), and for the name
+`SUPABASE_SERVICE_ROLE_KEY`. The grep has no rule for `sb_secret_` keys, so do
+not rely on it to catch one.
 
 ## Troubleshooting
 
@@ -226,6 +228,11 @@ Errors from RLS, the ledger and the hosted project are covered in
 3. **Local Postgres is 15, hosted dev is 17.** `config.toml` sets
    `major_version = 15`.
 4. **Timing not measured.** The 3-minute `db:reset` target has not been checked.
+
+Fixed: the old known issue 1, "RLS recursion" (staff policies on `products` and
+`orders` read `public.users`), which the header of
+`20261106230039_staff_policies_use_role_helpers.sql` refers to. That migration
+fixed it, and the numbering above no longer matches.
 
 The full list is in [docs/SUPABASE.md](../docs/SUPABASE.md#known-issues).
 

@@ -15,9 +15,9 @@ Shared Claude API integration package for the Sisig platform. It wraps the Anthr
 
 These are problems in the current code. This README describes them; it does not fix them.
 
-- **The default model is retired.** `chat` and `streamChat` default to `claude-3-5-sonnet-20241022`, which Anthropic retired on October 28, 2025. A call that does not pass `options.model` fails. The translation, code-analysis and documentation helpers never pass a model, so they always use the retired default.
-- **Every request sends `temperature`** (default `0.7`). Current models, including Claude Opus 4.7 and later and the 5.x models, reject a non-default `temperature` with a 400 error.
-- **The SDK is old.** `^0.24` resolves to 0.24.3, which sends API version `2023-06-01`. The current TypeScript SDK is past 1.0 and sends a newer API version by default.
+- **The default model is retired.** `chat` and `streamChat` default to `claude-3-5-sonnet-20241022`, which Anthropic's model deprecation docs list as retired on October 28, 2025. A call that does not pass `options.model` fails. The translation, code-analysis and documentation helpers never pass a model, so they always use the retired default.
+- **Every request sends `temperature`** (default `0.7`). According to Anthropic's docs, Claude Opus 4.7 and later and the 5.x models reject a non-default `temperature` with a 400 error.
+- **The SDK is old.** `^0.24` resolves to 0.24.3, which sends API version `2023-06-01`. Anthropic's docs describe newer SDK releases (1.0 and later) that send a newer API version by default.
 - **Helpers cannot take a key or a model.** Each helper creates its own `new ClaudeClient()`, so it reads the key from `process.env.ANTHROPIC_API_KEY` and uses the default model.
 - **Text only.** `chat` and `streamChat` accept string message content only, so images and tool results cannot be sent.
 
@@ -153,7 +153,7 @@ All helpers use `new ClaudeClient()` internally (see [Known Issues](#known-issue
 | Module | Exports |
 |--------|---------|
 | `translator.ts` | `translateText(text, sourceLanguage = 'English', targetLanguage = 'Spanish')` returns a `TranslationResult`. `detectLanguage(text)` returns the model's answer cast to `Language`, unchecked. `translateToMultipleLanguages(text, source, targets)` sends one request per target language in parallel. `SUPPORTED_LANGUAGES`: English, Spanish, French, German, Japanese, Chinese, Korean, Portuguese, Russian, Arabic. |
-| `code-analyzer.ts` | `analyzeCode(code, language = 'typescript')` returns a `CodeAnalysis` (`issues`, `improvements`, `summary`) parsed from the first JSON object in the reply. `generateCodeDocumentation`, `suggestRefactoring` and `explainCode` take the same arguments and return a string. |
+| `code-analyzer.ts` | `analyzeCode(code, language = 'typescript')` returns a `CodeAnalysis` (`issues`, `improvements`, `summary`) parsed with the greedy pattern `/\{[\s\S]*\}/`, which spans from the first `{` to the last `}` in the reply, so a reply with two JSON objects fails to parse. `generateCodeDocumentation`, `suggestRefactoring` and `explainCode` take the same arguments and return a string. |
 | `doc-generator.ts` | `generateAPIDocs(code, { style, includeExamples, includeTypeInfo })`, `generateREADME(description, features, setup)`, `generateTestCases(code, framework)`, `generateChangelog(currentVersion, previousVersion, changes)`, `generateContributingGuide(projectName, techStack)`. Each returns a string. |
 
 Exported types: `CreateMessageOptions`, `ContentBlock`, `MessageResponse`, `ParsedResponse`, `ConversationMessage`, `CodeAnalysis`, `Language`, `TranslationResult`, `DocGenerationOptions`.
@@ -177,7 +177,7 @@ The only model ID in the code is the retired default, `claude-3-5-sonnet-2024102
 ## API Keys
 
 - Create keys in the [Claude Console](https://platform.claude.com).
-- Never commit a key. `.env` and `.env.local` are gitignored. CI runs gitleaks and fails on a string that looks like an Anthropic key (`sk-ant-` followed by 20 or more characters) in `apps/` or `packages/`.
+- Never commit a key. `.env` and `.env.local` are gitignored. CI runs gitleaks, and a separate `git grep` step in `.github/workflows/ci.yml` fails on a string that looks like an Anthropic key (`sk-ant-` followed by 20 or more characters) in `apps/` or `packages/`.
 - Never put a key in the mobile app (see the warning at the top).
 
 ## Troubleshooting

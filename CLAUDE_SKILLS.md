@@ -99,7 +99,7 @@ interface CodeAnalysis {
 }
 ```
 
-`analyzeCode` asks for JSON and parses the first `{...}` block in the reply. Each function creates its own `ClaudeClient`, so it reads `ANTHROPIC_API_KEY` from the environment and uses the retired default model.
+`analyzeCode` asks for JSON and extracts it with the greedy pattern `/\{[\s\S]*\}/`, which spans from the first `{` to the last `}` in the reply, so a reply with two JSON objects fails to parse. Each function creates its own `ClaudeClient`, so it reads `ANTHROPIC_API_KEY` from the environment and uses the retired default model.
 
 ---
 
@@ -235,7 +235,7 @@ await client.streamChat(
 );
 ```
 
-Every request also sends `temperature` (default 0.7), which current models reject. See the [package README](packages/claude/README.md#known-issues).
+Every request also sends `temperature` (default 0.7). According to Anthropic's docs, Claude Opus 4.7 and later and the 5.x models reject a non-default `temperature`. See the [package README](packages/claude/README.md#known-issues).
 
 ### Conversation Manager
 
@@ -300,7 +300,7 @@ const client = new ClaudeClient(process.env.ANTHROPIC_API_KEY);
 const client = new ClaudeClient('sk-ant-xxx');
 ```
 
-- Never commit a key. CI runs gitleaks and fails on a string that looks like an Anthropic key in `apps/` or `packages/`.
+- Never commit a key. CI runs gitleaks, and a separate `git grep` step in `.github/workflows/ci.yml` fails on a string that looks like an Anthropic key in `apps/` or `packages/`.
 - Never ship a key in the mobile bundle, including through an `EXPO_PUBLIC_` variable.
 
 ### 2. Error Handling

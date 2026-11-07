@@ -57,9 +57,9 @@ All four jobs run on `ubuntu-latest`. Durations below are from run 42338504203 (
   3. `actions/setup-node@v4` with Node 18 and `cache: pnpm` (the pnpm store)
   4. **Restore Turborepo cache:** `actions/cache@v4` on `.turbo/cache` (see [Caching](#caching))
   5. **Install dependencies:** `pnpm install --frozen-lockfile`
-  6. **Lint:** `pnpm lint` (ESLint in every workspace)
-  7. **Type check:** `pnpm typecheck` (`tsc --noEmit`; Turborepo builds the workspace packages first, through `typecheck`'s `^build` dependency)
-  8. **Unit tests:** `pnpm test` (Jest in every workspace)
+  6. **Lint:** `pnpm lint` (ESLint in every workspace that has the script; `apps/admin` is a placeholder)
+  7. **Type check:** `pnpm typecheck` (`tsc --noEmit`; Turborepo runs the `build` tasks of the workspace packages before it (the `^build` dependency in `turbo.json`). The root scripts also pass the deprecated `--parallel` flag; in a timing check with Turborepo 2.11.10 and no cache, dependent tasks still started only after the builds finished)
+  8. **Unit tests:** `pnpm test` (Jest in every workspace that has the script)
   9. **Check Expo dependencies:** `pnpm -F @sisig/mobile exec expo install --check`. Fails if an installed package version does not match what Expo SDK 51 expects. It compares versions only.
   10. **Build workspace dependencies of the mobile app:** `pnpm turbo run build --filter='@sisig/mobile^...'`. Builds the `dist/` entry points of the `@sisig/*` packages the app imports. Step 7 already built them; this step keeps step 11 working if it ever runs on its own.
   11. **Bundle mobile app (Android export):** `pnpm -F @sisig/mobile exec expo export --platform android --output-dir ../../.expo-export-check`. A full Metro bundle of the app. It catches what step 9 cannot: a missing entry point, an undeclared or mis-pinned package, an import Metro cannot resolve. The output goes to `.expo-export-check/` at the repo root, which is git-ignored and not kept.
@@ -78,7 +78,7 @@ Step 9 has been in the job since the first DEVOPS-02 pipeline. PR #16 added step
 #### Job 4: `secrets`
 - **Timeout:** 5 minutes. **Measured duration:** 7 seconds.
 - **Checks, in workflow order:**
-  1. **gitleaks scan:** `gitleaks/gitleaks-action@v2` with default rules, on the full history (`fetch-depth: 0`). Fails on a detected key or token.
+  1. **gitleaks scan:** `gitleaks/gitleaks-action@v2` with default rules. It scans the commits of the push or pull request, not the whole history: run 42338504203 used `--log-opts=-1` and logged "1 commits scanned". `fetch-depth: 0` only makes the history available. Fails on a detected key or token.
   2. **Service-role key or JWT pattern:** `git grep -F` for the HS256 JWT header `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9` in `apps/` and `packages/`.
   3. **Anthropic API key pattern:** `git grep -E` for `sk-ant-` followed by 20 or more key characters in `apps/` and `packages/`. Placeholders such as `sk-ant-...` in the READMEs do not match. `ANTHROPIC_API_KEY` itself is not checked, because client code references it legitimately.
   4. **`SUPABASE_SERVICE_ROLE_KEY` references:** `git grep -F` for that name in `apps/` and `packages/`.
@@ -230,7 +230,7 @@ Median over the last 10 CI runs up to that one, including one failed run (`gh ru
 
 ### gitleaks
 
-Detects leaked secrets with its default rules (AWS keys, GitHub tokens, Slack webhooks and others) across the full git history. Fails the PR when it finds one. There is no `.gitleaksignore` yet.
+Detects leaked secrets with its default rules (AWS keys, GitHub tokens, Slack webhooks and others) in the commits of each push or pull request. It does not rescan the whole history. Fails the PR when it finds one. There is no `.gitleaksignore` yet.
 
 ### Service-role key and JWT check
 

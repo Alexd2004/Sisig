@@ -137,9 +137,10 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=<the project's publishable key, sb_publishable_...
   `pnpm db:start` or `pnpm exec supabase status` prints. An Android emulator cannot reach
   the host's `127.0.0.1`; see [LOCAL-DEVELOPMENT.md](LOCAL-DEVELOPMENT.md).
 - Only the publishable (anon) key goes here. The secret or service-role key must never reach
-  the app. CI's `secrets` job greps `apps/` and `packages/` for HS256 JWTs (the legacy key
-  format) and for the name `SUPABASE_SERVICE_ROLE_KEY`. It has no rule for `sb_secret_`
-  keys, so do not rely on it to catch one.
+  the app. CI's `secrets` job runs gitleaks over the whole repo, then greps `apps/` and
+  `packages/` for one fixed string, the HS256 JWT header (the legacy key format), and for
+  the name `SUPABASE_SERVICE_ROLE_KEY`. The grep has no rule for `sb_secret_` keys, so do
+  not rely on it to catch one.
 - `apps/mobile/src/lib/supabase.ts` throws at launch if either value is missing.
 - Expo inlines `EXPO_PUBLIC_*` values when it bundles the app, so restart the dev server
   after you change the file.
@@ -315,13 +316,16 @@ other change.
 4. **Staff checks read the JWT.** Policies call `is_staff()`, which is fast and avoids
    policy recursion, but can be stale for one token lifetime. Writes that need a privilege
    re-check `user_roles` inside a `SECURITY DEFINER` function, as `set_user_role` does.
-5. **Tables added by DATA-04 and DATA-18 are read-only for every API role.** `anon`,
-   `authenticated` and `service_role` hold SELECT only on `locations`, `loyalty_settings`,
-   `points_ledger`, `point_balances`, `rewards` and `reward_redemptions`. Writes are meant
-   to go through `SECURITY DEFINER` RPCs (planned, LOY-01/03/04).
+5. **Tables added by DATA-04 and DATA-18 are read-only for every API role.** No API role
+   can write `locations`, `loyalty_settings`, `points_ledger`, `point_balances`, `rewards`
+   or `reward_redemptions`. `authenticated` and `service_role` hold SELECT on all six.
+   `anon` holds SELECT on `locations`, `loyalty_settings` and `rewards` only, and nothing
+   on the other three. Writes are meant to go through `SECURITY DEFINER` RPCs (planned,
+   LOY-01/03/04).
 6. **`service_role` skips RLS but not grants.** It is the role behind the secret
-   (service-role) key. It keeps default privileges on the older tables, but on the six
-   tables above it can only read.
+   (service-role) key. It keeps default privileges on the older tables (`profiles`,
+   `user_roles`, `products`, `orders`, `order_items`), so it can write them directly. On
+   the six tables above it can only read.
 7. **Roles:** `anon` is a request with only the publishable key. `authenticated` is a
    request with a signed-in user's token. Both reach Postgres through PostgREST.
 
@@ -509,7 +513,7 @@ column and its delete action. `private.job_runs` has no foreign keys and is not 
 | Table | Purpose | Notable rules | Added by |
 | --- | --- | --- | --- |
 | `profiles` | Member details | E.164 phone check; birthday month and day both set or both null, and the day must exist in the month (29 February allowed); unique lower-cased email | DATA-02 |
-| `user_roles` | One role per member | Default `customer`; written only by triggers and `set_user_role` | DATA-02 |
+| `user_roles` | One role per member | Default `customer`; clients write it only through the sign-up trigger and `set_user_role` (`service_role` keeps default write privileges) | DATA-02 |
 | `products` | Menu items | `price` in cents, `price >= 0` | DATA-01 |
 | `orders` | Customer orders | `user_id` references `profiles` (on delete cascade); `total_amount >= 0`, `points_earned >= 0` | DATA-01, DATA-04 |
 | `order_items` | Order lines | `quantity > 0`, `unit_price >= 0`, deleted with the order | DATA-01 |
@@ -586,7 +590,8 @@ with a stable order for keyset pagination (paging by the last row seen).
 The trigger `points_ledger_append_only` runs `private.enforce_points_ledger_append_only()`
 before every UPDATE or DELETE and raises `23001` ("points_ledger is append-only: UPDATE is
 not allowed"), whoever runs the statement, the table owner `postgres` included. The API
-roles, `service_role` included, hold SELECT only, so they fail earlier with `42501`.
+roles hold at most SELECT (`authenticated` and `service_role` hold SELECT, `anon` nothing),
+so they fail earlier with `42501`.
 TRUNCATE is revoked from the API roles because it skips row triggers. The table owner can
 still truncate.
 
@@ -736,10 +741,11 @@ DATA-18 was done "slim": Sisig has one store, so there is one `locations` row.
 These rules apply to LOY-01 (earning), LOY-03 (redemption), LOY-04 (reversals and
 adjustments), DATA-06 (orders) and any other work that writes loyalty data.
 
-1. **Write only through `SECURITY DEFINER` RPCs** added in migrations. `anon`,
-   `authenticated` and `service_role` hold SELECT only on `locations`,
-   `loyalty_settings`, `points_ledger`, `point_balances`, `rewards` and
-   `reward_redemptions`. Do not add write grants or write policies so that a client or an
+1. **Write only through `SECURITY DEFINER` RPCs** added in migrations. No API role has a
+   write grant on `locations`, `loyalty_settings`, `points_ledger`, `point_balances`,
+   `rewards` or `reward_redemptions`: `authenticated` and `service_role` hold SELECT only,
+   and `anon` holds SELECT on `locations`, `loyalty_settings` and `rewards` and nothing on
+   the rest. Do not add write grants or write policies so that a client or an
    Edge Function can write these tables directly. Follow the function rules in
    [CONVENTIONS.md](../supabase/CONVENTIONS.md#security-definer-functions).
 2. **Re-check roles in `user_roles`** for staff and admin actions. The `app_role` claim can
@@ -843,7 +849,8 @@ that checks existing rows, or rewriting data.
    `20261106230040_retire_legacy_users.sql` adds a validated foreign key, so it fails with
    `23503` if an order has no profile, rather than deleting the order.
 5. **Add checks that old rows might fail as `NOT VALID`**, and validate them in a later
-   migration once the data is clean (as `20261104180526_money_points_checks.sql` does).
+   migration once the data is clean. `20261104180526_money_points_checks.sql` adds its
+   checks this way; the validating migration does not exist yet.
 6. **Get product-owner sign-off for data loss.** The legacy table drops in PR #19 record
    that decision in their migration headers.
 
@@ -1076,7 +1083,8 @@ How the tests work:
 - Files switch role with `set local role authenticated` (or `anon`) and fake the token with
   a `pg_temp.act_as(uid, app_role)` helper that sets `request.jwt.claims`. They call the
   hook function directly. They cannot show that the hook is enabled on a hosted project.
-- Each file uses its own UUID prefix for fixtures (for example `09000000-...`) and avoids
+- Each file uses its own UUID prefix for fixtures (for example `09000000-...`; 03 and 04
+  both use `00000000-...`) and avoids
   data that a later migration might add.
 
 Run them with `pnpm db:test` (needs the local stack, so Docker). The CI `database` job runs
@@ -1106,7 +1114,7 @@ Local-stack problems (Docker, `db:reset`, stale types, function 500s) are in
 | A change to `seed.sql` never reaches hosted dev | The CLI records seed files by hash | Insert the rows with `db query --linked` |
 | `db push` lists migrations you did not expect, or refuses one | Your `main` is behind, or a timestamp sorts before the last applied migration | Update `main`; rename a clashing migration ([README](../supabase/README.md#timestamp-clashes)) |
 | `types-drift` fails | The committed types do not match the migrations | Run `pnpm db:types`, or apply the diff CI prints |
-| A role change error shows as "A database error occurred" | `normalizeError` in `packages/api/src/client.ts` does not map `P0002` | Known issue; read `error.details` |
+| `set_user_role` with an unknown user shows "A database error occurred" | It raises `P0002` "User not found", which `normalizeError` in `packages/api/src/client.ts` does not map (permission denials, `42501`, map to `PERMISSION_DENIED`) | Known issue; read `error.details` |
 
 ## Known issues
 
@@ -1144,3 +1152,6 @@ Local-stack problems (Docker, `db:reset`, stale types, function 500s) are in
 14. **Edge Functions are not deployed**, and their CORS setting allows any origin.
 15. **The table owner can still truncate `points_ledger`**, which skips the append-only
     trigger. Only the API roles lost TRUNCATE.
+16. **`pnpm db:reset` does not start the stack.** Run `pnpm db:start` first.
+17. **`db:reset` timing is not measured.** The 3-minute target in
+    [supabase/README.md](../supabase/README.md) has not been checked.

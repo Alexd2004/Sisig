@@ -12,9 +12,10 @@ together (auth, roles, RLS, the loyalty model, the hosted dev project) is in
   `supabase migration new`. Never pick a timestamp by hand. Files go in
   `supabase/migrations/<YYYYMMDDHHMMSS>_<name>.sql`.
 - **One concern per migration:** one table group, one function, or one policy
-  set per file. Two existing files bundle more than one concern
-  (`20261028000000_init_schemas.sql`, `20261028000003_init_orders_and_rewards.sql`).
-  They predate this rule and are not split.
+  set per file. Several early files bundle more than one concern
+  (`20261028000000_init_schemas.sql`, `20261028000003_init_orders_and_rewards.sql`,
+  `20261028000004_init_identity.sql`, `20261028000006_identity_hardening.sql`).
+  They are not split.
 - **Start with a header comment.** Name the Jira key, the one concern, why the
   change is needed and any data impact, and end with "Forward-only: no existing
   migration is edited." The DATA-04 and DATA-18 migrations are examples.
@@ -27,7 +28,8 @@ together (auth, roles, RLS, the loyalty model, the hosted dev project) is in
   `pnpm db:reset` and `pnpm db:types`.
 - **Checks that existing rows might fail are added `NOT VALID`.** Postgres then
   checks new and updated rows only. A later migration runs `VALIDATE CONSTRAINT`
-  once the data is clean (`20261104180526_money_points_checks.sql`).
+  once the data is clean. `20261104180526_money_points_checks.sql` adds its checks
+  this way; the migration that validates them does not exist yet.
 - **Fail loudly.** When a migration depends on the data being in a certain state,
   it fails with an error instead of deleting or rewriting rows to make it fit
   (`20261106230040_retire_legacy_users.sql` fails with 23503 if an order has no
@@ -35,8 +37,10 @@ together (auth, roles, RLS, the loyalty model, the hosted dev project) is in
 - **Destructive changes are audited first.** Before a migration that can lose or
   reject data reaches a shared environment, follow the audit and backup steps in
   [docs/SUPABASE.md](../docs/SUPABASE.md#destructive-migrations).
-- **Seed data is for the local stack.** Seed inserts use `on conflict do nothing`.
-  Data that every environment needs goes in a migration, not in `seed.sql`
+- **Seed data is for the local stack.** Seed inserts end with
+  `on conflict do nothing`. The clause only guards rows that have a fixed id or a
+  unique key (the placeholder store). The products insert has neither, so running
+  it twice duplicates the rows. Data that every environment needs goes in a migration, not in `seed.sql`
   (the loyalty settings baseline is in `20261106230042_create_loyalty_settings.sql`).
   Adding a NOT NULL column to a table that has rows needs a default in the same
   migration, and the default is dropped once the rows are filled.
@@ -85,10 +89,15 @@ together (auth, roles, RLS, the loyalty model, the hosted dev project) is in
   grants: `revoke all ... from anon, authenticated, service_role`, then
   `grant select` to the roles that read it. Every table added by DATA-04 and
   DATA-18 does this.
-- A table that is written by RPCs gets no INSERT, UPDATE or DELETE grant for any
-  API role, `service_role` included, and no write policy. Writes go through a
-  `SECURITY DEFINER` function: `set_user_role` for `user_roles`, and the LOY RPCs
-  for the loyalty tables (planned, LOY-01/03/04).
+- A new table that is written by RPCs gets no INSERT, UPDATE or DELETE grant for
+  any API role, `service_role` included, and no write policy. Writes go through a
+  `SECURITY DEFINER` function: the LOY RPCs for the six DATA-04 and DATA-18 tables
+  (planned, LOY-01/03/04).
+- Exception: the older tables predate this rule. `user_roles` revokes writes from
+  `anon` and `authenticated` only (clients write it through `set_user_role`), so
+  `service_role` keeps its default write privileges there. `profiles`, `products`,
+  `orders` and `order_items` keep the default grants for every API role and rely
+  on policies. No migration changes this yet.
 - To let clients change only some columns, revoke UPDATE and grant it per column
   (`profiles`: `first_name`, `last_name`, `phone_e164`, `birthday_month`,
   `birthday_day`, `province`, `locale`).
@@ -172,7 +181,8 @@ re-check `public.user_roles` in SQL (next section).
   lives in `private` and raises `23001` with
   `<table> is append-only: <operation> is not allowed`. Example:
   `points_ledger_append_only` runs `private.enforce_points_ledger_append_only()`.
-- API roles get SELECT only. `revoke all` also removes TRUNCATE, which skips
+- API roles get at most SELECT (`anon` gets nothing on `points_ledger`).
+  `revoke all` also removes TRUNCATE, which skips
   row triggers.
 - Corrections are new rows (a `reversal` row in `points_ledger`), never updates.
 - Any exception is as narrow as possible, and each of its guards has its own
@@ -243,7 +253,8 @@ No `pg_cron` job exists yet. These rules apply to the first one.
   `request.jwt.claims`. Run `reset role` before writing fixtures as `postgres`.
 - Fixtures insert into `auth.users`, so the sign-up trigger creates the profile
   and role. Each file uses its own UUID prefix (`09000000-...` in
-  `09_points_ledger_append_only.sql`). Tests do not depend on rows that a later
+  `09_points_ledger_append_only.sql`). The exception is 03 and 04, which both use
+  `00000000-...` (with different suffixes). Tests do not depend on rows that a later
   migration or real data could add: look up seeded rows by their `PLACEHOLDER`
   label, and use far-future dates (2999) for test settings versions.
 - Run them with `pnpm db:test`. CI runs the same command.

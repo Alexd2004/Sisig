@@ -72,7 +72,7 @@ flowchart TD
   I --> J["App open on the emulator,<br/>Metro running"]
 ```
 
-Each box is one numbered step below. Steps 1 to 4 happen once per Mac; steps 5 to 9 once per clone.
+The first nine boxes are the numbered steps below; the last box is the result. Steps 1 to 4 happen once per Mac, steps 5 to 7 and 9 once per clone, and step 8 (starting the emulator) every session.
 
 ### 1. Install Node.js and pnpm
 
@@ -196,7 +196,7 @@ Rules:
 
 - `.env.local` is git-ignored (`.gitignore` lists `.env.local`). Never commit it, and never paste its values into docs, issues or PRs.
 - Use only the publishable key. Never put a secret key or a service-role key in the app: Expo copies every `EXPO_PUBLIC_*` value into the JavaScript bundle, where anyone with the app can read it. CI also fails if client code contains a service-role key (see [DEVOPS-02-CI.md](./DEVOPS-02-CI.md)).
-- If either value is missing, the app throws at launch: `EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY must be set.` The check is in `apps/mobile/src/lib/supabase.ts`.
+- If either value is missing, the app throws at launch: `EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY must be set. See CONTRIBUTING.md.` The check is in `apps/mobile/src/lib/supabase.ts`.
 
 ### 7. Build the workspace packages
 
@@ -288,7 +288,7 @@ pnpm -F @sisig/mobile exec expo run:android
 
 JavaScript-only changes never need a rebuild.
 
-**About `pnpm dev`.** The root `pnpm dev` also starts Metro. It runs Turborepo, which first builds the workspace packages (the `dev` task depends on `^build` in `turbo.json`) and then runs the mobile app's `dev` script, `expo start --dev-client`. It does not pass `--android`, so it does not open the app on the emulator. The direct command in step 3 is the routine verified on the team's Mac.
+**About `pnpm dev`.** The root `pnpm dev` also starts Metro. It runs Turborepo, which runs the mobile app's `dev` script, `expo start --dev-client`. Turborepo runs the `build` tasks of the workspace packages before it (the `^build` dependency in `turbo.json`). The root scripts also pass the deprecated `--parallel` flag; in a timing check with Turborepo 2.11.10 and no cache, dependent tasks still started only after the builds finished. Ordering under `--parallel` is not guaranteed by Turborepo's docs, so building the packages yourself first (step 2) is the safe routine. It does not pass `--android`, so it does not open the app on the emulator. The direct command in step 3 is the routine verified on the team's Mac.
 
 ## Database Work
 
@@ -344,7 +344,7 @@ adb shell am force-stop com.sisig.mobile
 
 `com.sisig.mobile` is the Android package name from `apps/mobile/app.json`.
 
-### The app crashes at launch: "EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY must be set"
+### The app crashes at launch: "EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY must be set. See CONTRIBUTING.md."
 
 `apps/mobile/.env.local` is missing or incomplete (see [step 6](#6-create-appsmobileenvlocal)). After you fix it, restart Metro with `--clear` so the new values are bundled.
 

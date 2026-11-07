@@ -87,9 +87,9 @@ Run these from the repo root.
 | `pnpm turbo run build --filter='@sisig/mobile^...'` | Build the packages the mobile app depends on (into `dist/`) |
 | `pnpm -F @sisig/mobile exec expo run:android` | Build and install the Android dev client, then start Metro |
 | `pnpm -F @sisig/mobile exec expo start --dev-client --android` | Start Metro and open the installed dev client |
-| `pnpm lint` | ESLint in every workspace |
-| `pnpm typecheck` | `tsc --noEmit` in every workspace (builds dependencies first) |
-| `pnpm test` | Jest in every workspace |
+| `pnpm lint` | ESLint in every workspace that has the script (`apps/admin` is a placeholder) |
+| `pnpm typecheck` | `tsc --noEmit` in every workspace that has the script (`apps/admin` is a placeholder); runs after the package builds it depends on |
+| `pnpm test` | Jest in every workspace that has the script (`apps/admin` is a placeholder) |
 | `pnpm format` | Prettier, writing changes |
 | `pnpm format:check` | Prettier check without changes (fails today; see [Known Issues](#known-issues)) |
 | `pnpm -F @sisig/mobile run doctor` | Run `expo-doctor` on the mobile app |
@@ -100,7 +100,7 @@ Notes:
 
 - `pnpm build` is not usable yet. It also runs the mobile app's `build` script (`expo build`), which the local Expo CLI rejects. Release builds need EAS, which is not set up (DEVOPS-04).
 - Plain `pnpm doctor` runs pnpm's own checker, not `expo-doctor`, because `doctor` is a built-in pnpm command. Use `run doctor` as shown.
-- `pnpm test --watch` does not work at the root: pnpm rejects `--watch`. Pass it to Jest in one package: `pnpm -F @sisig/mobile test -- --watch`.
+- `pnpm test --watch` does not work at the root: Turborepo rejects it (`ERROR unexpected argument '--watch' found`). Pass it to Jest in one package: `pnpm -F @sisig/mobile test -- --watch`.
 
 ## Development Client
 
@@ -181,6 +181,7 @@ Checked on 2026-11-06:
   After `expo run:android`, it also warns about the generated native folders. That warning is local only.
 - **Prebuild output is not git-ignored.** `apps/mobile/android/`, `apps/mobile/ios/` and the scripts prebuild adds to `apps/mobile/package.json` show up in `git status`.
 - **iOS is not verified.** The Android dev client was built and run on an emulator on 2026-11-06. `expo run:ios` has not been run, because the team's Mac has no full Xcode.
+- **Root scripts use the deprecated `--parallel` flag.** `dev`, `lint`, `typecheck`, `test` and the format scripts in the root `package.json` pass it to Turborepo. Turborepo 2.11.10 still ran the `^build` dependencies first in a no-cache timing check, but its docs do not guarantee that, so build the packages before starting Metro.
 - **Branch protection is not configured** on `main` (see [CONTRIBUTING.md](CONTRIBUTING.md#branch-protection)).
 
 ## Troubleshooting

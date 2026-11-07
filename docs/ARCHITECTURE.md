@@ -67,10 +67,10 @@ flowchart LR
   claude -.->|"no screen calls it"| anthropic
   rest --> db
   auth -->|"custom_access_token_hook"| db
-  edge -->|"verifies caller via /auth/v1/user"| auth
+  edge -.->|"verifies caller via /auth/v1/user"| auth
 ```
 
-Solid arrows are in use on `main`. Dotted arrows are code that exists but nothing calls yet. The mobile app does not call any Edge Function yet.
+Solid arrows are calls the app makes on `main`. Dotted arrows are code that exists but that the app never runs, including the `whoami` Edge Function, which the app does not call yet.
 
 ---
 
@@ -214,9 +214,9 @@ Each tab is a folder with its own `_layout.tsx` (a Stack) and an `index.tsx` scr
 
 `app/_layout.tsx` nests the providers in this order: `AppThemeProvider` (theme), `PersistQueryClientProvider` (query cache with disk persistence), `SessionProvider` (session status), then `RootNavigator`.
 
-`RootNavigator`:
+At module level, `app/_layout.tsx` calls `SplashScreen.preventAutoHideAsync()`, so the splash screen stays up. `RootNavigator` then:
 
-- Keeps the splash screen up (`SplashScreen.preventAutoHideAsync`) and renders nothing until the session status is no longer `loading` and the Inter fonts have loaded or failed. A font failure falls back to the system font.
+- Renders nothing until the session status is no longer `loading` and the Inter fonts have loaded or failed. A font failure falls back to the system font.
 - Computes `resolveAuthRedirect` from the status, the route segments and a `returnTo` search parameter, and calls `router.replace` when it returns a path.
 - Watches for a change from `signed-in` to `signed-out`. It then calls `router.dismissAll()` and `router.replace('/welcome')`.
 - Declares `redeem-confirm` and `item/[id]` as modal screens.
@@ -256,9 +256,10 @@ Guests can browse Home, Order and More. Rewards and Code show a sign-in prompt i
 | `/home` | Static welcome text, a sample special, "You have 0 points", and a list of quick links. |
 | `/order` | Three hard-coded sample items with Add buttons that do nothing, and a $0.00 cart total. |
 | `/rewards` | Points shown as 0, three sample rewards whose Redeem buttons open `/redeem-confirm`, and a "How it works" card. |
-| `/code` | A placeholder QR area and a sample code behind a Show Code toggle. |
+| `/code` | A placeholder QR area and a sample code behind a Show Code toggle. While the code is hidden, a leftover "Sign in to view your code" card with a Sign In button shows, even to signed-in users, and the button does nothing. |
 | `/more` | Menu items and the Sign In or Sign Out item. |
-| `(auth)` screens, `/redeem-confirm`, `/item/[id]` | `PlaceholderScreen` with a note naming the ticket that builds the real screen. Welcome has Log in, Sign up and Continue as guest buttons. |
+| `(auth)` screens | `PlaceholderScreen` with a note saying the real screen is built in AUTH-01 to AUTH-03. Welcome has Log in, Sign up and Continue as guest buttons. |
+| `/redeem-confirm`, `/item/[id]` | `PlaceholderScreen` with a note saying the real screen is built in a later ticket. |
 
 ### Keep tests out of `app/`
 
@@ -297,6 +298,7 @@ The shared code is in `packages/api`. The mobile wiring is in `apps/mobile/src/l
 ```mermaid
 sequenceDiagram
   autonumber
+  participant More as More screen
   participant Nav as RootNavigator
   participant Prov as SessionProvider
   participant Src as Supabase session source
@@ -317,7 +319,7 @@ sequenceDiagram
   Auth-)Src: auth event with session or null
   Src-)Prov: signed-in if a session exists, else signed-out
   alt User taps Sign Out on the More tab
-    Nav->>Prov: signOut()
+    More->>Prov: useSession().signOut()
     Prov->>Src: signOut()
     Note over Src: signOutsInFlight becomes 1
     Src->>Purge: signOutAndPurge(client, queryClient)
@@ -364,7 +366,7 @@ No screen calls these hooks or mutations yet.
 
 ### Error normalisation
 
-Queries and mutations throw `normalizeError(error)` (`packages/api/src/client.ts`). It returns an `AppError` with a fixed, user-safe `message` and a stable `code`. The raw error stays in `details`.
+Queries and mutations throw `normalizeError(error)` (`packages/api/src/client.ts`). The exception is `useRedeemPoints`, which makes no request and throws a plain `Error` until its RPC exists. It returns an `AppError` with a fixed, user-safe `message` and a stable `code`. The raw error stays in `details`.
 
 | Source | Condition | `code` |
 |--------|-----------|--------|
@@ -410,7 +412,7 @@ flowchart TB
   sbfile --> qc
   hooks --> keyf
   hooks -->|"client.from(...)"| rest
-  hooks -->|"on error"| norm
+  hooks -->|"on error, except useRedeemPoints"| norm
   qc --> persist
   persist --> allow
   allow -->|yes| async2
@@ -454,7 +456,7 @@ Brand values live only in `brand.ts`. The Tamagui config turns them into themes,
 
 `packages/ui/src/theme/brand.ts` has three layers:
 
-- `palette`: the raw hex values. Only the themes reference them.
+- `palette`: the raw hex values. `tamagui.config.ts` registers them as Tamagui colour tokens, and the themes map semantic names to them. Components use the semantic names, not palette entries.
 - `SEMANTIC_TOKENS`: 20 names (`background`, `surface`, `surfaceMuted`, `foreground`, `foregroundMuted`, `placeholder`, `border`, `primary`, `primaryPressed`, `primaryForeground`, `accent`, `accentForeground`, `success`, `successForeground`, `warning`, `warningForeground`, `danger`, `dangerForeground`, `bubble`, `bubbleForeground`).
 - `lightTheme` and `darkTheme`: each maps every semantic name to a palette value.
 
@@ -463,7 +465,7 @@ All values are placeholders until the client's brand palette and fonts arrive.
 ### Tamagui Configuration
 
 - `packages/ui/src/tamagui.config.ts` calls `createTamagui` with size, space, radius and zIndex tokens, `palette` as the colour tokens, the `light` and `dark` themes, Tamagui shorthands, and `heading` and `body` fonts built with `createInterFont`. Settings include `allowedStyleValues: 'somewhat-strict'` and `disableRootThemeClass: true`.
-- Tamagui is pinned at 1.144.4, because Tamagui 2.x and later require React 19 and the app runs React 18.2.
+- Tamagui is pinned at 1.144.4 to stay on React 18.2, which the app runs.
 - The file declares `TamaguiCustomConfig` so Tamagui's types know the config:
 
 ```typescript

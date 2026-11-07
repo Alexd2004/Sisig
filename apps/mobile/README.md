@@ -39,7 +39,7 @@ Run the package build again after you change code under `packages/*/src` or pull
 
 ## Development Client
 
-The `dev` script is `expo start --dev-client`, so Metro serves a development build, not Expo Go. `app.json` lists config plugins (`expo-router`, `expo-secure-store`, `expo-dev-client`, `expo-font`) and enables the new architecture on iOS and Android. These are applied when the native project is built.
+The `dev` script is `expo start --dev-client`, so Metro serves a development build, not Expo Go. `app.json` lists config plugins (`expo-router`, `expo-secure-store`, `expo-dev-client`, `expo-font`) and are applied when the native project is built. `app.json` also sets `newArchEnabled: true` under `ios` and `android`, but those keys have no effect on SDK 51: the generated `android/gradle.properties` has `newArchEnabled=false`. Turning the new architecture on in SDK 51 would need the `expo-build-properties` plugin.
 
 ### Android
 

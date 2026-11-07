@@ -7,6 +7,9 @@
 // The Markdown files are the source of truth; regenerate the PDFs in the same PR as any doc change.
 // Needs Google Chrome (or Chromium) and network access: the page loads marked and Mermaid from
 // jsDelivr. Set CHROME_PATH to use a browser that is not in a standard location.
+// Each PDF is checked in a first browser run (--dump-dom) and printed in a second. The print run
+// loads the page again and is not checked itself, so if the network drops between the two runs,
+// re-run the script: a diagram that failed to render shows as a red box in the PDF.
 // No npm dependencies: Node built-ins plus a headless browser.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -97,7 +100,7 @@ function buildHtml({ title, docs, handbook, date }) {
   @page { size: Letter; margin: 18mm 16mm 20mm 16mm;
     @bottom-left { content: "${footerTitle}"; font: 8pt -apple-system, 'Helvetica Neue', Arial, sans-serif; color: #777; }
     @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8pt -apple-system, 'Helvetica Neue', Arial, sans-serif; color: #777; } }
-  @page :first { @bottom-left { content: none; } @bottom-right { content: none; } }
+  @page cover { @bottom-left { content: none; } @bottom-right { content: none; } }
   :root { --ink: #1f2328; --muted: #59636e; --line: #d1d9e0; --code-bg: #f6f8fa; --accent: #b4401b; }
   html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body { font: 10.5pt/1.5 -apple-system, 'Helvetica Neue', Arial, sans-serif; color: var(--ink); background: #fff; margin: 0; }
@@ -123,7 +126,7 @@ function buildHtml({ title, docs, handbook, date }) {
   .mermaid { break-inside: avoid; text-align: center; margin: 10pt 0 12pt; }
   .mermaid svg { max-width: 100% !important; max-height: 215mm; height: auto; }
   .mermaid-error { break-inside: avoid; border: 1.5pt solid #cf222e; background: #ffebe9; padding: 8pt; font-size: 9pt; white-space: pre-wrap; }
-  .cover { break-after: page; padding-top: 50mm; }
+  .cover { page: cover; break-after: page; padding-top: 50mm; }
   .cover-mark { font-size: 12pt; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
   .cover-title { font-size: 30pt; border: 0; margin: 6pt 0 10pt; }
   .cover-sub { font-size: 13pt; color: var(--muted); }
