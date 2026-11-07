@@ -1,5 +1,6 @@
-import { readdirSync, readFileSync, statSync } from 'fs';
+import { readFileSync } from 'fs';
 import { join, relative } from 'path';
+import { listSourceFiles } from './test-utils';
 
 /**
  * UI components must reference semantic theme names, never raw colour literals.
@@ -8,16 +9,6 @@ import { join, relative } from 'path';
 const SRC_ROOT = join(__dirname);
 const BRAND_FILE = join(SRC_ROOT, 'theme', 'brand.ts');
 const RAW_COLOUR_LITERAL = /['"`]#[0-9a-fA-F]{3,8}['"`]/;
-
-function listSourceFiles(dir: string): string[] {
-  return readdirSync(dir).flatMap((entry) => {
-    const path = join(dir, entry);
-    if (statSync(path).isDirectory()) {
-      return listSourceFiles(path);
-    }
-    return /\.(ts|tsx)$/.test(entry) && !/\.test\.tsx?$/.test(entry) ? [path] : [];
-  });
-}
 
 describe('ui component colours', () => {
   it('uses semantic theme names instead of raw hex colours outside the brand file', () => {
