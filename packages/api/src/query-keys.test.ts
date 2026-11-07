@@ -16,6 +16,7 @@ describe('shouldPersistQuery', () => {
     ['profile', keys.profile.me()],
     ['orders', keys.orders.list()],
     ['auth session', keys.auth.session()],
+    ['remote config (own AsyncStorage key)', keys.config.app()],
   ])('never persists %s', (_name, queryKey) => {
     expect(shouldPersistQuery(queryKey)).toBe(false);
   });

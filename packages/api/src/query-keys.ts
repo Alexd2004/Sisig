@@ -25,6 +25,12 @@ export const keys = {
     transactions: () => ['loyalty', 'transactions'] as const,
     rewards: () => ['loyalty', 'rewards'] as const,
   },
+  config: {
+    all: () => ['config'] as const,
+    // Remote config (PLAT-06). Not on the persisted allowlist: the app keeps the last good
+    // config in its own AsyncStorage key, which outlives logout and the 24h cache maxAge.
+    app: () => ['config', 'app'] as const,
+  },
   profile: {
     all: () => ['profile'] as const,
     me: () => ['profile', 'me'] as const,
