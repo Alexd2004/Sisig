@@ -30,6 +30,7 @@ const TEXT_PAIRS: readonly (readonly [SemanticToken, SemanticToken])[] = [
   ['warningForeground', 'warning'],
   ['danger', 'background'],
   ['danger', 'surface'],
+  ['danger', 'surfaceMuted'],
   ['dangerForeground', 'danger'],
   ['bubbleForeground', 'bubble'],
 ];

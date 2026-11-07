@@ -645,6 +645,31 @@ pnpm -F @sisig/mobile typecheck
 
 4. All screens use the new colours with no component changes.
 
+### THEME-02: Core UI Kit
+
+Feature screens (and admin via THEME-07) build on these primitives from `@sisig/ui`, all exported from `packages/ui/src/index.ts`. Visuals use the THEME-01 placeholder tokens until DSGN-01/DSGN-02 land.
+
+| Area | Components |
+|------|------------|
+| Typography | `Text` (`variant` body/caption, `tone` default/muted/danger), `Heading` (`level` 1-3, header role) |
+| Layout | `Screen` (safe area, keyboard avoidance, optional scroll), `Card`, `ListItem`, `Divider`, `SectionHeader` |
+| Actions | `Button` (primary/secondary/ghost/destructive, `loading`, `disabled`), `IconButton` |
+| Display | `Badge`/`Chip` (neutral/accent/success/warning/danger), `Points`, `Price` |
+| Forms | `Input` (`preset`: email/password/newPassword/oneTimeCode/phone), `TextArea`, `FormField`, `Switch`, `Checkbox` |
+
+**Accessibility rules built into the kit:**
+- Every interactive component has a role, a label, a disabled state and a 44x44 pt minimum target (`MIN_TOUCH_TARGET`; `IconButton` adds `hitSlop` when drawn smaller). `Button` and `IconButton` also expose `busy`.
+- An async `onPress` (one that returns a promise) puts `Button`/`IconButton` in the loading state and ignores presses until it settles, so forms cannot double submit. A rejection is not swallowed (it surfaces as an unhandled rejection, as with a plain `Pressable`), so handlers catch their own errors to show error UI.
+- Pressable `Card` and `ListItem` rows are a single accessibility element: `Card` requires an `accessibilityLabel` with `onPress`, and `ListItem` reads meaningful trailing content through `trailingAccessibilityLabel`.
+- `FormField` errors are announced: the error container is an Android polite live region (TalkBack), and on iOS the message is sent with `AccessibilityInfo.announceForAccessibility`, because VoiceOver has no live regions. The control's accessibility label also includes the current error.
+- All text goes through `Text`/`TextInput`, so OS font scaling stays on and capped at `FONT_SCALE_CAP`.
+
+**Haptics:** primary `Button` presses call `useHaptics().impactLight()`. The default is a no-op because expo-haptics is a native module and is not installed yet. UXQ-08 wires it by wrapping the app in `HapticsProvider`.
+
+**Formatting:** `formatPoints` (`1250` -> `'1,250 pts'`) and `formatPrice` (integer cents, `1499` -> `'$14.99'`, en-CA/CAD) live in `packages/ui/src/format/format.ts` until PLAT-09 centralises formatters.
+
+**Safe area:** `react-native-safe-area-context` is a peer dependency of `@sisig/ui` (already in the dev client). expo-router's root provides the `SafeAreaProvider`.
+
 ---
 
 ## Integration Points
