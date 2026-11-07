@@ -98,7 +98,9 @@ apps/mobile/
 │   ├── item/[id].tsx           # Modal (placeholder)
 │   └── ai-*.tsx                # ai-chat, ai-journal, ai-summarizer, ai-translator (UI only)
 ├── src/
-│   ├── components/             # AppThemeProvider, SignInRequired, PlaceholderScreen, TabBarIcon
+│   ├── components/             # AppThemeProvider, SignInRequired, PlaceholderScreen, TabBarIcon,
+│   │                           # ForcedUpdateScreen, UpdateBanner, AnnouncementBanner, OrderingPausedCard
+│   ├── config/                 # Remote config (PLAT-06): provider, useFeature, update gate, caches, reporter
 │   ├── hooks/                  # useAI, useImageAnalysis (not used by any screen)
 │   ├── lib/                    # supabase, session-storage, session-lifecycle, logout, query-persistence
 │   ├── navigation/             # auth-gate, pop-to-root, stack-options
@@ -141,6 +143,17 @@ Details and diagrams are in [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md#pl
 - **Sign-out.** `signOutAndPurge` (`src/lib/logout.ts`) signs out locally, then clears the in-memory query cache, the encrypted session entries and key, and the persisted query cache. Add any new per-user store to this function.
 - **Query cache on disk.** `src/lib/query-persistence.ts` persists only successful menu and rewards-catalogue queries, for 24 hours. Points, profile, orders and auth are never written to disk.
 - **Data hooks.** Query keys, hooks, mutations and `normalizeError` live in `packages/api`. No screen uses the hooks yet; the screens show sample data.
+
+## Remote Config, Kill Switches and Forced Update
+
+Details and a diagram are in [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md#plat-06-remote-config-and-forced-update). To change values, follow [docs/runbooks/remote-config.md](../../docs/runbooks/remote-config.md).
+
+- **`RemoteConfigProvider`** (`src/config/remote-config.tsx`, mounted in `app/_layout.tsx`) reads `public.app_config` on launch, every 5 minutes and on every return to the foreground. It keeps the last good rows in AsyncStorage (`sisig.app-config`), so an offline launch uses them, and falls back to the bundled defaults on a first offline launch.
+- **Gate a feature** with `useFeature('ordering')` or `useFeature('receiptScan')` (`src/config/useFeature.ts`). It returns `{ enabled, message }`. The Order tab hides its menu and checkout while ordering is off and shows `OrderingPausedCard` with the message.
+- **Update gate.** Below `min_supported_version_<platform>`, the root layout shows `ForcedUpdateScreen` instead of the navigator. Below `recommended_version`, `UpdateBanner` appears on Home at most once a day. Neither ever triggers from the bundled defaults or a failed fetch.
+- **Installed version.** `getInstalledVersion()` (`src/config/installed-version.ts`) reads `Constants.expoConfig.version` (the `version` in `app.json`), because `expo-application` is not installed and adding it needs a dev client rebuild. Bump `version` in `app.json` for every store release, or the gate compares the wrong number.
+- **Reporting.** Malformed or unknown config values go to `reportConfigIssue` (`src/config/reporter.ts`): `console.warn` in development, nothing in release builds. PLAT-04 plugs Sentry in with `setConfigReporter`.
+- **Testing a screen that reads the config.** Without a provider, `useRemoteConfig()` returns the bundled defaults. To test other values, wrap the screen in `RemoteConfigProvider` with a fake client, cache and `AppState`, as `src/config/remote-config.test.tsx` does.
 
 ## Theme and UI Components
 
