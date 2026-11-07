@@ -4,7 +4,7 @@
 -- transaction, which is rolled back at the end.
 
 begin;
-select plan(26);
+select plan(28);
 
 -- Helpers ------------------------------------------------------------------
 
@@ -72,17 +72,19 @@ update public.reward_redemptions
    set status = 'fulfilled', fulfilled_at = now(), fulfilled_by = '11000000-0000-4000-8000-000000000001'
  where id = '11000000-0000-4000-8000-000000000042';
 
--- Tests 1-7: no client write grants on balances and redemptions (AC4); rewards are
--- read-only for every API role.
+-- Tests 1-9: no client or service_role write grants on balances and redemptions (AC4);
+-- rewards are read-only for every API role.
 select table_privs_are('public', 'point_balances', 'anon', array[]::name[], 'anon has no privileges on point_balances');
 select table_privs_are('public', 'point_balances', 'authenticated', array['SELECT']::name[], 'authenticated can only SELECT point_balances');
+select table_privs_are('public', 'point_balances', 'service_role', array['SELECT']::name[], 'service_role can only SELECT point_balances');
 select table_privs_are('public', 'reward_redemptions', 'anon', array[]::name[], 'anon has no privileges on reward_redemptions');
 select table_privs_are('public', 'reward_redemptions', 'authenticated', array['SELECT']::name[], 'authenticated can only SELECT reward_redemptions');
+select table_privs_are('public', 'reward_redemptions', 'service_role', array['SELECT']::name[], 'service_role can only SELECT reward_redemptions');
 select table_privs_are('public', 'rewards', 'anon', array['SELECT']::name[], 'anon can only SELECT rewards');
 select table_privs_are('public', 'rewards', 'authenticated', array['SELECT']::name[], 'authenticated can only SELECT rewards');
 select table_privs_are('public', 'rewards', 'service_role', array['SELECT']::name[], 'service_role can only SELECT rewards');
 
--- Test 8: RLS is on for all three tables.
+-- Test 10: RLS is on for all three tables.
 select is(
   (select count(*)::int
      from pg_class
@@ -92,7 +94,7 @@ select is(
   'RLS is enabled on point_balances, rewards and reward_redemptions'
 );
 
--- Test 9: redemption code lookup index (AC5).
+-- Test 11: redemption code lookup index (AC5).
 select ok(
   (select indexdef like '%(code)'
      from pg_indexes
@@ -101,7 +103,7 @@ select ok(
   'reward_redemptions has the code lookup index'
 );
 
--- Tests 10-11: one chain-wide balance per member (DATA-18).
+-- Tests 12-13: one chain-wide balance per member (DATA-18).
 select hasnt_column('public', 'point_balances', 'location_id', 'point_balances has no location column');
 
 select throws_ok(
@@ -110,7 +112,7 @@ select throws_ok(
   'a member cannot have a second balance row'
 );
 
--- Tests 12-14: read-only policy sets.
+-- Tests 14-16: read-only policy sets.
 select policies_are(
   'public', 'point_balances',
   array['Members can view their own balance', 'Staff can view all balances'],
@@ -129,7 +131,7 @@ select policies_are(
   'reward_redemptions has the member and staff read policies'
 );
 
--- Tests 15-16: a member reads only their own balance and redemptions.
+-- Tests 17-18: a member reads only their own balance and redemptions.
 set local role authenticated;
 select pg_temp.act_as('11000000-0000-4000-8000-000000000001', 'customer');
 
@@ -145,7 +147,7 @@ select results_eq(
   'a member sees only their own redemptions'
 );
 
--- Tests 17-19: staff read every balance, every redemption and every reward.
+-- Tests 19-21: staff read every balance, every redemption and every reward.
 select pg_temp.act_as('11000000-0000-4000-8000-000000000003', 'staff');
 
 select is(
@@ -170,7 +172,7 @@ select is(
 
 reset role;
 
--- Test 20: the public catalogue shows only active, unarchived rewards inside their window.
+-- Test 22: the public catalogue shows only active, unarchived rewards inside their window.
 set local role anon;
 select pg_temp.act_anon();
 
@@ -182,7 +184,7 @@ select results_eq(
 
 reset role;
 
--- Tests 21-22: a code is unique among issued redemptions, and reusable once fulfilled.
+-- Tests 23-24: a code is unique among issued redemptions, and reusable once fulfilled.
 -- Fixture: a second redeem entry for M, for the new redemption to spend.
 insert into public.points_ledger (id, user_id, delta, source_type, idempotency_key) values
   ('11000000-0000-4000-8000-000000000024', '11000000-0000-4000-8000-000000000001', -40, 'reward_redeem',
@@ -213,7 +215,7 @@ select lives_ok(
   'the code can be issued again once the first redemption is fulfilled'
 );
 
--- Tests 23-26: AUTH-05. Deleting M follows every foreign key at once: M's balance is
+-- Tests 25-28: AUTH-05. Deleting M follows every foreign key at once: M's balance is
 -- deleted, M's order is deleted, M's redemption is kept with user_id and order_id NULL,
 -- and the redemption M fulfilled for O is kept with fulfilled_by NULL.
 select lives_ok(

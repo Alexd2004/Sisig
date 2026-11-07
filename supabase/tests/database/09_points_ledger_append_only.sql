@@ -68,7 +68,8 @@ create temp table ledger_09_snapshot as
     from public.points_ledger l
    where l.user_id = '09000000-0000-4000-8000-000000000001';
 
--- Tests 1-3: postgres cannot update or delete a row, not even to clear user_id directly.
+-- Tests 1-3: postgres cannot update or delete a row, and cannot clear user_id outside the
+-- foreign key action.
 select throws_ok(
   $$ update public.points_ledger set delta = 200 where id = '09000000-0000-4000-8000-000000000021' $$,
   '23001', 'points_ledger is append-only: UPDATE is not allowed',
@@ -84,7 +85,7 @@ select throws_ok(
 select throws_ok(
   $$ update public.points_ledger set user_id = null where id = '09000000-0000-4000-8000-000000000021' $$,
   '23001', 'points_ledger is append-only: UPDATE is not allowed',
-  'a direct update that clears user_id is rejected outside the foreign key action'
+  'clearing user_id outside the foreign key action is rejected'
 );
 
 -- Tests 4-5: service_role holds SELECT only.
