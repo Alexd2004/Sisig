@@ -223,6 +223,21 @@ jobs:
             *) echo "✗ git grep failed with exit code $rc"; exit 1 ;;
           esac
 
+      # New-style Supabase secret keys look like sb_secret_<body>. Requiring
+      # 20+ body characters keeps docs that mention the prefix (sb_secret_...)
+      # from matching.
+      - name: Check for Supabase secret key pattern in client code
+        run: |
+          set +e
+          git grep -n -I -E -e "sb_secret_[A-Za-z0-9_-]{20,}" -- apps packages
+          rc=$?
+          set -e
+          case "$rc" in
+            0) echo "✗ Supabase secret key pattern found in client code"; exit 1 ;;
+            1) echo "✓ No Supabase secret key patterns in client code" ;;
+            *) echo "✗ git grep failed with exit code $rc"; exit 1 ;;
+          esac
+
       - name: Check for SUPABASE_SERVICE_ROLE_KEY references
         run: |
           set +e
