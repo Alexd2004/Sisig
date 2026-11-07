@@ -298,6 +298,9 @@ isOneToOne: true
 "is_staff":
 { Args: Record<PropertyKey, never>; Returns: boolean
                            },
+"raise_sample_error":
+{ Args: Record<PropertyKey, never>; Returns: undefined
+                           },
 "set_user_role":
 { Args: { "p_role": Database["public"]['Enums']["app_role"],"p_user_id": string }; Returns: undefined
                            }
