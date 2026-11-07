@@ -18,7 +18,8 @@ RLS, `SECURITY DEFINER`) are in [supabase/CONVENTIONS.md](../../supabase/CONVENT
 - Every write RPC that must not run twice takes `p_idempotency_key text`
   holding a client-generated UUID. Existing `idempotency_key` columns
   (`points_ledger`, `reward_redemptions`) are `text`, so the key is stored as
-  its canonical lowercase UUID string.
+  the string the client sent, unchanged (`crypto.randomUUID()` is
+  already lowercase).
 - The client creates the key once per **user intent** (for example one tap on
   "Redeem") with `crypto.randomUUID()` (`expo-crypto` on mobile), and keeps it
   for the life of that intent.

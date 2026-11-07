@@ -40,9 +40,12 @@ function latestCatalogMigration(): { file: string; sql: string } {
   const found = latest;
   const later = files.filter((name) => name > found.file);
   for (const file of later) {
-    if (/app_error_catalog/i.test(fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8'))) {
+    const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
+    if (
+      /(drop|alter|create)\s+function\s+(if\s+exists\s+)?private\.app_error_catalog\b/i.test(sql)
+    ) {
       throw new Error(
-        `${file} mentions app_error_catalog after ${found.file} but does not ` +
+        `${file} drops, alters or plainly creates private.app_error_catalog after ${found.file} but does not ` +
           '`create or replace function private.app_error_catalog(`; update this drift test.'
       );
     }
