@@ -11,6 +11,7 @@ This is the index of the developer docs for the Sisig Eh! rewards app monorepo. 
 | [docs/LOCAL-DEVELOPMENT.md](./LOCAL-DEVELOPMENT.md) | Mac setup from a clean clone: JDK 17, Android SDK, emulator, dev client, hosted Supabase; the daily routine; troubleshooting | New developers; anyone running the app |
 | [docs/ARCHITECTURE.md](./ARCHITECTURE.md) | System design: database, navigation, theme and data layer, and the decisions behind them | Developers changing how parts fit together; reviewers |
 | [docs/SUPABASE.md](./SUPABASE.md) | The hosted Supabase dev project: CLI login and link, applying migrations with `supabase db push`, destructive migrations | Anyone who changes the database or applies migrations |
+| [docs/runbooks/remote-config.md](./runbooks/remote-config.md) | Runbook: switch off ordering or receipt scanning, force or recommend an app update, show an announcement, with the SQL for each | Whoever handles a POS outage, a critical bug or a release |
 | [docs/DEVOPS-02-CI.md](./DEVOPS-02-CI.md) | The GitHub Actions workflows: triggers, jobs, steps, caches, branch protection, CI failures | Anyone whose PR fails CI; repo admins |
 | [supabase/README.md](../supabase/README.md) | The local Supabase stack: `db:*` commands, folder layout, schema, migrations, generated types, tests, Edge Functions | Developers working on the database |
 | [supabase/CONVENTIONS.md](../supabase/CONVENTIONS.md) | Rules for migrations, naming, schemas, policies, `SECURITY DEFINER` functions, Edge Functions and database tests | Database authors and reviewers |

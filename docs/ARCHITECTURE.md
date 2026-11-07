@@ -11,14 +11,15 @@ This guide explains how the Sisig Eh! rewards app fits together: the apps and pa
 3. [DATA-01: Database Architecture](#data-01-database-architecture)
 4. [PLAT-02: Navigation Architecture](#plat-02-navigation-architecture)
 5. [PLAT-03: Session and Data Layer](#plat-03-session-and-data-layer)
-6. [THEME-01: Design System](#theme-01-design-system)
-7. [Claude Integration](#claude-integration)
-8. [Integration Points](#integration-points)
-9. [Development Workflow](#development-workflow)
-10. [Deployment Strategy](#deployment-strategy)
-11. [Summary of Key Decisions](#summary-of-key-decisions)
-12. [Next Steps](#next-steps)
-13. [Related Documents](#related-documents)
+6. [PLAT-06: Remote Config and Forced Update](#plat-06-remote-config-and-forced-update)
+7. [THEME-01: Design System](#theme-01-design-system)
+8. [Claude Integration](#claude-integration)
+9. [Integration Points](#integration-points)
+10. [Development Workflow](#development-workflow)
+11. [Deployment Strategy](#deployment-strategy)
+12. [Summary of Key Decisions](#summary-of-key-decisions)
+13. [Next Steps](#next-steps)
+14. [Related Documents](#related-documents)
 
 ---
 
@@ -156,7 +157,7 @@ The full Supabase guide is [SUPABASE.md](SUPABASE.md). Conventions for migration
 
 - **Postgres on Supabase.** Forward-only migrations live in `supabase/migrations/`. Never edit an applied migration; add a new one.
 - **Row-Level Security (RLS).** Every table created in the `public` schema enables RLS. The `private` schema holds internal functions (for example `custom_access_token_hook`) and is not exposed through PostgREST.
-- **Current `public` tables** (from `packages/api/src/database.types.ts`): `profiles`, `user_roles`, `products`, `orders`, `order_items`, `locations`, `loyalty_settings`, `points_ledger`, `point_balances`, `rewards` and `reward_redemptions`.
+- **Current `public` tables** (from `packages/api/src/database.types.ts`): `profiles`, `user_roles`, `products`, `orders`, `order_items`, `locations`, `loyalty_settings`, `points_ledger`, `point_balances`, `rewards`, `reward_redemptions` and `app_config` (PLAT-06).
 - **PR #19 (DATA-04)** dropped `public.users`, the `user_role` enum, and the legacy `loyalty_points` and `loyalty_transactions` tables. Identity now lives in `profiles` and `user_roles` (DATA-02). Loyalty now uses the ledger tables above.
 - **Money is integer cents**, with non-negative checks.
 - **Points change only through RPCs** (database functions called over PostgREST). The posting and redemption RPCs are planned (LOY-01, LOY-03, LOY-04).
@@ -212,11 +213,12 @@ Each tab is a folder with its own `_layout.tsx` (a Stack) and an `index.tsx` scr
 
 ### Root layout
 
-`app/_layout.tsx` nests the providers in this order: `AppThemeProvider` (theme), `PersistQueryClientProvider` (query cache with disk persistence), `SessionProvider` (session status), then `RootNavigator`.
+`app/_layout.tsx` nests the providers in this order: `AppThemeProvider` (theme), `PersistQueryClientProvider` (query cache with disk persistence), `RemoteConfigProvider` (remote config and the update gate, PLAT-06), `SessionProvider` (session status), then `RootNavigator`.
 
 At module level, `app/_layout.tsx` calls `SplashScreen.preventAutoHideAsync()`, so the splash screen stays up. `RootNavigator` then:
 
-- Renders nothing until the session status is no longer `loading` and the Inter fonts have loaded or failed. A font failure falls back to the system font.
+- Renders nothing until the session status is no longer `loading`, the Inter fonts have loaded or failed, and the remote config has read its disk cache (at most 2 seconds). A font failure falls back to the system font.
+- Renders `ForcedUpdateScreen` instead of the Stack while the update gate is `blocked`, and skips its navigation effects then (see [PLAT-06](#plat-06-remote-config-and-forced-update)).
 - Computes `resolveAuthRedirect` from the status, the route segments and a `returnTo` search parameter, and calls `router.replace` when it returns a path.
 - Watches for a change from `signed-in` to `signed-out`. It then calls `router.dismissAll()` and `router.replace('/welcome')`.
 - Declares `redeem-confirm` and `item/[id]` as modal screens.
@@ -253,8 +255,8 @@ Guests can browse Home, Order and More. Rewards and Code show a sign-in prompt i
 
 | Route | Content on `main` |
 |-------|-------------------|
-| `/home` | Static welcome text, a sample special, "You have 0 points", and a list of quick links. |
-| `/order` | Three hard-coded sample items with Add buttons that do nothing, and a $0.00 cart total. |
+| `/home` | The soft update banner and the announcement banner when the remote config asks for them, then static welcome text, a sample special, "You have 0 points", and a list of quick links. |
+| `/order` | Three hard-coded sample items with Add buttons that do nothing, and a $0.00 cart total. While `ordering_enabled` is false, an "Ordering is paused" card with the configured message instead. |
 | `/rewards` | Points shown as 0, three sample rewards whose Redeem buttons open `/redeem-confirm`, and a "How it works" card. |
 | `/code` | A placeholder QR area and a sample code behind a Show Code toggle. While the code is hidden, a leftover "Sign in to view your code" card with a Sign In button shows, even to signed-in users, and the button does nothing. |
 | `/more` | Menu items and the Sign In or Sign Out item. |
@@ -357,7 +359,7 @@ Steps 3 to 5 each run in their own `try`/`catch`, and a failure is logged, not t
 ### Queries, mutations and the persisted cache
 
 - **QueryClient** (`packages/api/src/query-client.ts`): queries default to a 60-second `staleTime`. `shouldRetryQuery` retries only network and 5xx failures, up to 3 times. Mutations never retry.
-- **Query keys** (`packages/api/src/query-keys.ts`): every key comes from the `keys` factory (`auth`, `menu`, `orders`, `loyalty`, `profile`). Invalidate by prefix, for example `keys.menu.all()`.
+- **Query keys** (`packages/api/src/query-keys.ts`): every key comes from the `keys` factory (`auth`, `menu`, `orders`, `loyalty`, `config`, `profile`). Invalidate by prefix, for example `keys.menu.all()`.
 - **Query hooks** (`packages/api/src/hooks/useMenu.ts`): `useMenu` (5-minute `staleTime`), `menuCategoriesQueryOptions` and `useMenuCategories` (10 minutes), and `useProduct` (5 minutes). Each takes the Supabase client as an argument.
 - **Mutations** (`packages/api/src/mutations.ts`): `useCreateOrder` inserts into `orders` and `order_items` and invalidates `keys.orders.all()`. `useRedeemPoints` always throws `redeem_loyalty_reward RPC is not implemented yet` until the redemption RPC exists (planned, LOY-03). Both keep their invalidation when a caller passes its own `onSuccess` (PR #11). `optimisticUpdate` applies an update and rolls it back on error.
 - **Persisted cache** (`apps/mobile/src/lib/query-persistence.ts`): `PersistQueryClientProvider` writes the cache to AsyncStorage under `sisig.query-cache`, unencrypted, with a 24-hour `maxAge` and buster `v1`. Only successful queries whose key starts with an allowlisted prefix are written: `['menu']` and `['loyalty', 'rewards']`. Points, profile, orders and auth are never written to disk, and mutations are never persisted.
@@ -420,6 +422,64 @@ flowchart TB
 ```
 
 The session is encrypted on disk, while the persisted query cache is plain JSON, which is why only non-personal keys are on its allowlist. The hooks in the middle exist in `@sisig/api`, but no screen uses them yet.
+
+---
+
+## PLAT-06: Remote Config and Forced Update
+
+The restaurant can switch off ordering or receipt scanning and force outdated apps to update without shipping a build. The values live in `public.app_config` (schema and RLS in [SUPABASE.md](SUPABASE.md#remote-config-app_config)). Until the admin team builds toggles, they are changed with SQL: see the [remote config runbook](runbooks/remote-config.md).
+
+### Pieces
+
+| Piece | Where | Job |
+|-------|-------|-----|
+| `appConfigQueryOptions`, `parseAppConfig`, `DEFAULT_APP_CONFIG` | `packages/api/src/remote-config.ts` | Fetch the raw `key`/`value` rows (key `keys.config.app()`, 5-minute `staleTime` and `refetchInterval`); validate each known key with zod; bundled fail-open defaults |
+| `RemoteConfigProvider`, `useRemoteConfig` | `apps/mobile/src/config/remote-config.tsx` | Read the disk cache, fetch, refetch on foreground, save each good fetch, parse, compute the update gate |
+| `useFeature('ordering' \| 'receiptScan')` | `apps/mobile/src/config/useFeature.ts` | `{ enabled, message }` for feature screens. The Order tab uses it |
+| `evaluateUpdateGate` | `apps/mobile/src/config/update-gate.ts` | `none`, `soft` or `blocked` from the installed version, the platform, the config and its source |
+| `getInstalledVersion` | `apps/mobile/src/config/installed-version.ts` | The installed version, from `Constants.expoConfig.version` |
+| `setConfigReporter`, `reportConfigIssue` | `apps/mobile/src/config/reporter.ts` | Where config problems go: `console.warn` in development, nothing in release builds until PLAT-04 plugs in Sentry |
+| `ForcedUpdateScreen`, `UpdateBanner`, `AnnouncementBanner`, `OrderingPausedCard` | `apps/mobile/src/components/` | The UI, built from `@sisig/ui` `Text` and `Button` |
+
+### Flow
+
+```mermaid
+flowchart TB
+  start["Launch, every 5 minutes,<br/>or return to foreground"] --> cache["Read last good rows<br/>AsyncStorage sisig.app-config<br/>(launch only)"]
+  start --> fetch["Fetch app_config<br/>from PostgREST"]
+  fetch -->|ok| save["Save rows to disk"]
+  fetch -->|"failed"| keep["Keep what the app has"]
+  save --> pick
+  keep --> pick
+  cache --> pick{"Rows to use?"}
+  pick -->|"this session's fetch"| parse["parseAppConfig<br/>bad or unknown value: default + report"]
+  pick -->|"disk cache"| parse
+  pick -->|"none: first offline launch"| defaults["Bundled defaults<br/>source = defaults"]
+  parse --> gate{"Update gate"}
+  defaults --> nogate["Never blocks"]
+  gate -->|"installed below min_supported_version_platform<br/>and a store URL is set"| block["ForcedUpdateScreen<br/>instead of the navigator"]
+  gate -->|"installed below recommended_version"| soft["UpdateBanner on Home<br/>once per local day"]
+  gate -->|otherwise| app["App as usual"]
+  parse --> feature["useFeature: ordering off<br/>shows OrderingPausedCard"]
+```
+
+### Rules
+
+- **Fail-open.** A failed fetch never blocks: the app keeps the config it already has. The bundled defaults block nothing (every version `0.0.0`), and the gate ignores them anyway (`source === 'defaults'`). An unknown installed version, a platform other than iOS or Android, and a missing store URL also mean no block. A missing store URL is reported.
+- **Blocking from the cache is allowed.** A cached config came from the server, so a cold start offline still shows the update screen if the last good config required it.
+- **Per-key validation.** One malformed value falls back to its own default; the other keys still apply. Unknown keys are ignored. Each distinct problem goes to the reporter once per app session. Store links must be https on `apps.apple.com` or `play.google.com`, and the Uber Eats link on `ubereats.com`, because the blocking screen opens them with `Linking.openURL`.
+- **Own disk cache.** The config is saved under `sisig.app-config`, not in the TanStack persisted cache, because that one expires after 24 hours and is cleared on logout. The config is not personal data, so `signOutAndPurge` leaves it. The once-a-day banner date (`sisig.update-banner.last-shown`) is device-wide too.
+- **Within 5 minutes or on next foreground.** The query refetches every 5 minutes while the app runs, and `RemoteConfigProvider` refetches on every change to `active`. TanStack's `focusManager` is not wired to `AppState`, so the provider does this itself, for the config only.
+- **Not blocking the navigator.** The forced-update screen replaces the Stack rather than sitting on top of it, so modal routes cannot cover it and there is no back gesture to dismiss it.
+- **Banner day counted on first render.** `UpdateBanner` records the day when it first renders on Home, even if another tab is in front, so a customer can miss that day's banner. It still never shows more than once a day.
+- **Hooks from `@sisig/api` and React copies.** `@sisig/api` resolves React 18.3 while the app uses 18.2, so the app calls its own `useQuery` with `appConfigQueryOptions` instead of a hook exported from the package.
+
+### Limitations
+
+- **Installed version.** `expo-application` is not installed, and adding a native module needs a dev client rebuild. `getInstalledVersion()` reads `Constants.expoConfig.version`, the `version` from `app.json` embedded at build time. That is the installed build's version while the app has no `expo-updates`. When DEVOPS-05 adds `expo-updates` (OTA updates and `runtimeVersion`), switch the seam to `Application.nativeApplicationVersion`. OTA JS compatibility is DEVOPS-05's job, not this gate's.
+- **Sentry.** Problems are not sent to Sentry yet. PLAT-04 initialises Sentry and calls `setConfigReporter`.
+- **Receipt scanning** has no screen yet, so `useFeature('receiptScan')` has no caller. `uber_eats_url` is validated but not shown.
+- **Admin toggles** are not built (admin team). `is_admin()` reads the token, so a demoted admin keeps write access until their token expires.
 
 ---
 
@@ -651,6 +711,7 @@ No staging or production environment is defined in this repository.
 | Expo Router file-based routes | Routes and deep links follow the file tree | Every file in `app/` becomes a route, tests included |
 | Five-tab navigation with per-tab stacks | Fast access; each tab keeps its own history | Limited room for more top-level sections |
 | Development build, not Expo Go | Native config and plugins are applied at build time | Each native change needs a new dev client build |
+| Remote config is fail-open | A failed fetch or a bad value never locks customers out | A config the app cannot read cannot block an old version either |
 
 ---
 
@@ -662,7 +723,9 @@ Planned work named in the code and docs:
 - **AUTH-05:** member deletion and anonymisation (the ledger already allows it).
 - **LOY-01, LOY-03, LOY-04:** RPCs that post points and handle redemptions. `useRedeemPoints` waits on LOY-03.
 - **LOY-06:** client sign-off on loyalty rules; `loyalty_settings` values are placeholders until then.
-- **ADM-01:** admin app framework.
+- **ADM-01:** admin app framework. The admin team also builds the `app_config` toggles (PLAT-06).
+- **PLAT-04:** Sentry setup, including `setConfigReporter` for remote-config problems.
+- **DEVOPS-05:** OTA updates and `runtimeVersion`; switch `getInstalledVersion()` to `expo-application` then.
 - **DEVOPS-04:** release builds through EAS.
 - Client brand assets: swap the values in `packages/ui/src/theme/brand.ts`, then rebuild.
 

@@ -95,7 +95,8 @@ URLs are not templated in `config.toml` yet; AUTH-01 owns that.
 - **`public` tables**: `profiles`, `user_roles` (roles `customer`, `staff`,
   `admin`, `owner`), `products`, `orders`, `order_items`, `locations` (one store
   for now), `loyalty_settings` (versioned), `points_ledger` (append-only),
-  `point_balances`, `rewards` and `reward_redemptions`.
+  `point_balances`, `rewards`, `reward_redemptions` and `app_config` (remote
+  config, PLAT-06: public read, admin-only write).
 - **`public` functions**: `is_staff()`, `is_admin()`, `is_owner()`,
   `set_user_role(p_user_id, p_role)`, `current_loyalty_settings(p_at)`, and the
   sign-up triggers' `handle_new_user()` and `sync_profile_email()`.

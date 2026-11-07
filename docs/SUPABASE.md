@@ -29,6 +29,7 @@ PR description is gone from `main`, so it belongs here or in the migration itsel
 - [Row-level security](#row-level-security)
 - [Schema reference](#schema-reference)
 - [Loyalty data model](#loyalty-data-model)
+- [Remote config: `app_config`](#remote-config-app_config)
 - [Rules for the LOY tickets](#rules-for-the-loy-tickets)
 - [Migration lifecycle](#migration-lifecycle)
 - [Working with the hosted dev project](#working-with-the-hosted-dev-project)
@@ -45,8 +46,8 @@ Supabase is a hosted Postgres database with services around it. Sisig uses these
 | Part | What Sisig uses it for | State on `main` |
 | --- | --- | --- |
 | **Auth** (Supabase's auth server, at `/auth/v1`) | Accounts, sessions, and access tokens (JWTs, signed JSON tokens) that carry an `app_role` claim | The app restores the session, refreshes tokens while in the foreground and purges the device on sign-out. The sign-in and sign-up screens are placeholders (planned, AUTH-01 to AUTH-03). |
-| **Postgres** | Tables, constraints, triggers, functions and row-level security (RLS: per-row access rules enforced by the database) | 11 tables in `public`, one in `private`. Extensions `uuid-ossp`, `pg_cron`, `pgtap`, `pgcrypto` and `pg_net` are enabled. No `pg_cron` job exists yet. |
-| **PostgREST** (at `/rest/v1`) | Turns the `public` schema into a REST API. supabase-js `from('table')` and `rpc('function')` call it. | `@sisig/api` has `useMenu`, `useProduct`, `useMenuCategories` (products) and `useCreateOrder` (orders). No screen calls them yet. |
+| **Postgres** | Tables, constraints, triggers, functions and row-level security (RLS: per-row access rules enforced by the database) | 12 tables in `public`, one in `private`. Extensions `uuid-ossp`, `pg_cron`, `pgtap`, `pgcrypto` and `pg_net` are enabled. No `pg_cron` job exists yet. |
+| **PostgREST** (at `/rest/v1`) | Turns the `public` schema into a REST API. supabase-js `from('table')` and `rpc('function')` call it. | `@sisig/api` has `useMenu`, `useProduct`, `useMenuCategories` (products) and `useCreateOrder` (orders). No screen calls them yet. The app reads `app_config` on launch and foreground (PLAT-06). |
 | **Edge Functions** (Deno, at `/functions/v1`) | Server-side code that needs a trusted runtime | One sample function, `whoami`. Not deployed anywhere. |
 | **Realtime, Storage, GraphQL** | Nothing yet | Enabled by `supabase/config.toml` but unused. No storage bucket exists. CI starts the stack without Realtime. |
 | **Studio and the dashboard** | Browsing data and settings | Local Studio at `http://127.0.0.1:54323`; the Supabase dashboard for the hosted project. |
@@ -316,17 +317,26 @@ other change.
 4. **Staff checks read the JWT.** Policies call `is_staff()`, which is fast and avoids
    policy recursion, but can be stale for one token lifetime. Writes that need a privilege
    re-check `user_roles` inside a `SECURITY DEFINER` function, as `set_user_role` does.
+   The one exception is `app_config`, whose admin write policies trust the token alone
+   (see item 6).
 5. **Tables added by DATA-04 and DATA-18 are read-only for every API role.** No API role
    can write `locations`, `loyalty_settings`, `points_ledger`, `point_balances`, `rewards`
    or `reward_redemptions`. `authenticated` and `service_role` hold SELECT on all six.
    `anon` holds SELECT on `locations`, `loyalty_settings` and `rewards` only, and nothing
    on the other three. Writes are meant to go through `SECURITY DEFINER` RPCs (planned,
    LOY-01/03/04).
-6. **`service_role` skips RLS but not grants.** It is the role behind the secret
+6. **`app_config` is written directly by admins, through RLS.** `authenticated` holds
+   INSERT, UPDATE and DELETE on it, and RLS lets the write through only when
+   `(select public.is_admin())` is true (admin or owner, read from the token). `anon` and
+   `service_role` can only read it. Because the check reads the token, a demoted admin can
+   write until their token expires; the table holds no personal data, and the app only
+   accepts store and Uber Eats links on their official hosts, so this is accepted for now.
+   See [Remote config](#remote-config-app_config).
+7. **`service_role` skips RLS but not grants.** It is the role behind the secret
    (service-role) key. It keeps default privileges on the older tables (`profiles`,
    `user_roles`, `products`, `orders`, `order_items`), so it can write them directly. On
-   the six tables above it can only read.
-7. **Roles:** `anon` is a request with only the publishable key. `authenticated` is a
+   the six tables in item 5 and on `app_config` it can only read.
+8. **Roles:** `anon` is a request with only the publishable key. `authenticated` is a
    request with a signed-in user's token. Both reach Postgres through PostgREST.
 
 ```mermaid
@@ -357,8 +367,9 @@ A request passes the grant check, then RLS, then constraints and triggers. A
 | Pattern | Example | Used on |
 | --- | --- | --- |
 | Own rows | `(select auth.uid()) = user_id`; older policies use `auth.uid() = id` | `profiles`, `user_roles`, `orders`, `points_ledger`, `point_balances`, `reward_redemptions` |
-| Staff read everything | `(select public.is_staff())`; `profiles` and `user_roles` use `public.is_staff()` | All tables except `order_items`, `locations` and `loyalty_settings` |
-| Public read | `to anon, authenticated using (true)` | `locations`, `loyalty_settings` |
+| Staff read everything | `(select public.is_staff())`; `profiles` and `user_roles` use `public.is_staff()` | All tables except `order_items`, `locations`, `loyalty_settings` and `app_config` |
+| Public read | `to anon, authenticated using (true)` | `locations`, `loyalty_settings`, `app_config` |
+| Admin write | `to authenticated` with `using` and `with check ((select public.is_admin()))` | `app_config` |
 | Public read with a filter | `is_available = true`; active, not archived and inside the date window | `products`, `rewards` |
 | Through the parent row | `exists (select 1 from public.orders where id = order_items.order_id and user_id = auth.uid())` | `order_items` |
 | Own insert | `with check (auth.uid() = user_id)` | `orders` |
@@ -385,6 +396,7 @@ of once per row. The newer policies do this.
 | `point_balances` | nothing (no grants) | own row | all | none (SELECT only) | Same RPCs, in the same transaction as the ledger insert |
 | `rewards` | live rewards | live rewards | all | none (SELECT only) | Migrations or admin RPCs (planned, ADM work) |
 | `reward_redemptions` | nothing (no grants) | own redemptions | all | none (SELECT only) | Redemption RPC (planned, LOY-03) |
+| `app_config` | all | all | all | INSERT, UPDATE and DELETE by admins and owners only (`is_admin()`); members and staff are refused by RLS, `anon` by grants | SQL in the dashboard for now ([runbook](runbooks/remote-config.md)); admin toggles later (admin team) |
 
 ### Functions in `public` and `private`
 
@@ -503,10 +515,17 @@ erDiagram
     text code
     redemption_status status
   }
+  app_config {
+    text key PK "snake_case"
+    jsonb value
+    text description
+    timestamptz updated_at
+  }
 ```
 
 The current `public` schema and its link to `auth.users`. Labels name the foreign key
-column and its delete action. `private.job_runs` has no foreign keys and is not shown.
+column and its delete action. `app_config` stands alone: it has no foreign keys.
+`private.job_runs` has no foreign keys and is not shown.
 
 ### Tables
 
@@ -523,6 +542,7 @@ column and its delete action. `private.job_runs` has no foreign keys and is not 
 | `point_balances` | One chain-wide balance per member | All three counters `>= 0`; no location column | DATA-04 |
 | `rewards` | Reward catalogue | `point_cost > 0`; visible to everyone only while active, not archived and inside `starts_at`/`ends_at` | DATA-04 |
 | `reward_redemptions` | Issued reward codes | Code unique among issued redemptions; `points_spent > 0` | DATA-04 |
+| `app_config` | Remote config: kill switches, update gate, links | One row per `key` (snake_case check `app_config_key_format`); `value` is JSON; ten fail-open baseline rows | PLAT-06 |
 | `private.job_runs` | Log for scheduled jobs | Status `running`, `success` or `error`; no job writes it yet | DATA-01 |
 
 The money and points checks on `products`, `orders` and `order_items` were added
@@ -735,6 +755,48 @@ DATA-18 was done "slim": Sisig has one store, so there is one `locations` row.
 - Deferred until a second store exists: per-location staff RLS (DATA-18 AC4) and
   per-location settings with a chain fallback (DATA-18 AC5). `location_id` on orders and
   receipts belongs to DATA-06 and DATA-07.
+
+## Remote config: `app_config`
+
+PLAT-06 added `public.app_config` so the restaurant can switch off ordering or receipt
+scanning and force outdated apps to update without shipping a build. The app side is in
+[ARCHITECTURE.md](ARCHITECTURE.md#plat-06-remote-config-and-forced-update). The procedure
+for changing values is in the [remote config runbook](runbooks/remote-config.md).
+
+- **Shape.** One row per setting: `key` (primary key, snake_case), `value` (`jsonb`, not
+  null), `description` (not null, shown in Studio) and `updated_at`. No trigger maintains
+  `updated_at`, so every UPDATE sets it.
+- **Open key set.** The table does not restrict which keys exist, so a newer app can read a
+  key that older apps ignore. The app validates every known key with zod and falls back to
+  its bundled default when a value is malformed. It ignores unknown keys. Both cases are
+  reported.
+- **Baseline in the migration, not `seed.sql`.** Every environment needs the rows, and
+  [CONVENTIONS.md](../supabase/CONVENTIONS.md#migrations) puts such data in a migration.
+  The values are fail-open and match the defaults bundled in the app.
+- **Access.** Everyone, `anon` included, can read it: the app needs it before sign-in.
+  Only admins and owners can write it through the API, through RLS with
+  `(select public.is_admin())`. `service_role` can only read.
+- **Stale role claim.** `is_admin()` reads the token, so an admin who was demoted keeps
+  write access until their token expires (up to one token lifetime). The table holds no
+  personal data, so this is accepted. The dashboard SQL editor runs as `postgres` and does
+  not depend on the token.
+
+| Key | JSON type | Baseline | Effect in the app |
+| --- | --- | --- | --- |
+| `ordering_enabled` | boolean | `true` | `false` hides the Order tab's menu and checkout and shows the paused message |
+| `ordering_paused_message` | string (1 to 280 characters) or null | `null` | Message while ordering is off; null uses the app's default text |
+| `receipt_scan_enabled` | boolean | `true` | Kill switch for receipt scanning; read by `useFeature('receiptScan')`. No receipt-scan screen exists yet. |
+| `uber_eats_url` | https link on `ubereats.com` or null | `null` | Validated and available to screens; no screen shows it yet |
+| `min_supported_version_ios` | `"x.y.z"` | `"0.0.0"` | iOS installs below it get the blocking update screen |
+| `min_supported_version_android` | `"x.y.z"` | `"0.0.0"` | Android installs below it get the blocking update screen |
+| `recommended_version` | `"x.y.z"` | `"0.0.0"` | Installs below it get a dismissible banner on Home, at most once a day |
+| `store_url_ios` | https link on `apps.apple.com` or null | `null` | Link on the update screen and banner. Without it, iOS is never blocked |
+| `store_url_android` | https link on `play.google.com` or null | Google Play listing for `com.sisig.mobile` | Same, for Android |
+| `announcement_message` | string (1 to 280 characters) or null | `null` | Banner on the Home tab |
+
+`public.locations` also has `ordering_enabled` and `uber_eats_url` (DATA-18). The app reads
+neither today. `app_config.ordering_enabled` is the chain-wide kill switch. How it combines
+with a per-store setting is for DATA-06 to decide.
 
 ## Rules for the LOY tickets
 
@@ -1075,6 +1137,7 @@ and run in file-name order.
 | `09_points_ledger_append_only.sql` | `postgres` cannot update or delete (23001); `service_role` cannot either (42501); privileges; nested-trigger updates rejected; deleting a member keeps the rows with `user_id` NULL and nothing else changed |
 | `10_points_ledger_integrity.sql` | History index; idempotency per source type; one reversal per entry; `reversal_of` rule; location rule for in-store sources; chain-level sources; `delta` non-zero and bounded; member and staff reads |
 | `11_balances_and_redemptions.sql` | Privileges on balances, redemptions and rewards; RLS on; code index; chain-wide balance; policy sets; member and staff reads; the public catalogue window; code unique among issued and reusable after; what a member deletion does to balances, orders and redemptions |
+| `12_app_config.sql` | Columns, key check, RLS and policy set, grants; the ten fail-open baseline rows; `anon` and members read; `anon` writes refused by grants; member and staff writes refused or filtered by RLS; admin and owner insert, update and delete |
 
 How the tests work:
 

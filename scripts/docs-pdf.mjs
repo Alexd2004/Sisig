@@ -32,6 +32,7 @@ const HANDBOOK = [
   'docs/LOCAL-DEVELOPMENT.md',
   'docs/ARCHITECTURE.md',
   'docs/SUPABASE.md',
+  'docs/runbooks/remote-config.md',
   'supabase/README.md',
   'supabase/CONVENTIONS.md',
   'docs/DEVOPS-02-CI.md',
