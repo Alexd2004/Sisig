@@ -36,6 +36,25 @@ describe('normalizeError', () => {
       );
     });
 
+    it('maps no_data_found (P0002, e.g. set_user_role for a missing user) to NOT_FOUND', () => {
+      const err = normalizeError({
+        code: 'P0002',
+        message: 'User not found',
+        details: null,
+        hint: null,
+      });
+
+      expect(err.code).toBe('NOT_FOUND');
+      expect(err.message).toBe('Resource not found');
+    });
+
+    it.each(['PERM', 'NTFND'])(
+      'no longer maps the retired %s code (migrations raise 42501 and P0002 instead)',
+      (code) => {
+        expect(normalizeError({ code, message: 'legacy' }).code).toBe('DATABASE_ERROR');
+      }
+    );
+
     it('maps unique violations (23505) to DUPLICATE', () => {
       expect(normalizeError({ code: '23505', message: 'duplicate key value' }).code).toBe(
         'DUPLICATE'

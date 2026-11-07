@@ -1,5 +1,9 @@
 import { createClient, isAuthError, SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from './database.types';
+import { AppError } from './app-error';
+import { domainErrorFromEnvelope, domainErrorFromPostgrest } from './domain-errors';
+
+export { AppError };
 
 export interface StorageAdapter {
   getItem(key: string): Promise<string | null>;
@@ -34,28 +38,6 @@ export function createSupabaseClient(
       detectSessionInUrl: false,
     },
   });
-}
-
-/**
- * Application-level error type with user-safe messages
- */
-export class AppError extends Error {
-  constructor(
-    public message: string,
-    public code: string,
-    public details?: unknown
-  ) {
-    super(message);
-    this.name = 'AppError';
-  }
-
-  toJSON() {
-    return {
-      message: this.message,
-      code: this.code,
-      details: this.details,
-    };
-  }
 }
 
 const NETWORK_MESSAGE = 'Check your connection and try again';
@@ -119,14 +101,17 @@ function isPostgrestError(
   return typeof err.code === 'string' && typeof err.message === 'string';
 }
 
-function normalizePostgrestError(err: { code: string; details?: unknown }): AppError {
+function normalizePostgrestError(err: {
+  code: string;
+  details?: unknown;
+  hint?: unknown;
+}): AppError {
   switch (err.code) {
     // An empty code means the request never got an HTTP response (offline, timeout).
     case '':
       return new AppError(NETWORK_MESSAGE, 'NETWORK_ERROR', err);
     // Insufficient privilege: RLS denied the row or table.
     case '42501':
-    case 'PERM':
       return new AppError(
         'You do not have permission to perform this action',
         'PERMISSION_DENIED',
@@ -137,13 +122,18 @@ function normalizePostgrestError(err: { code: string; details?: unknown }): AppE
       return new AppError(SESSION_EXPIRED_MESSAGE, 'SESSION_EXPIRED', err);
     // Zero rows returned by .single().
     case 'PGRST116':
-    case 'NTFND':
+    // no_data_found, raised by RPCs such as set_user_role for a missing row.
+    case 'P0002':
       return new AppError('Resource not found', 'NOT_FOUND', err);
     // unique_violation
     case '23505':
       return new AppError('This record already exists', 'DUPLICATE', err);
     default:
-      return new AppError('A database error occurred', 'DATABASE_ERROR', err);
+      // Domain errors raised by private.raise_app_error (custom SQLSTATE class SS).
+      return (
+        domainErrorFromPostgrest(err) ??
+        new AppError('A database error occurred', 'DATABASE_ERROR', err)
+      );
   }
 }
 
@@ -183,4 +173,26 @@ function normalizeFunctionsHttpError(err: { context?: unknown }): AppError {
     'FUNCTION_ERROR',
     err
   );
+}
+
+/**
+ * Like normalizeError, but also reads the JSON body of a FunctionsHttpError so an Edge
+ * Function domain code (`{ "error": { "code": "RATE_LIMITED", ... } }`) becomes a
+ * DomainError. Use it for `client.functions.invoke` errors. Everything else is
+ * normalized exactly as normalizeError does.
+ */
+export async function normalizeErrorAsync(error: unknown): Promise<AppError> {
+  if (hasErrorName(error, 'FunctionsHttpError')) {
+    const response = error.context as { clone?: () => { json(): Promise<unknown> } } | undefined;
+    try {
+      const body = await response?.clone?.().json();
+      const domainError = domainErrorFromEnvelope(body, error);
+      if (domainError) {
+        return domainError;
+      }
+    } catch {
+      // Not JSON, or the body was already read: fall back to the status mapping.
+    }
+  }
+  return normalizeError(error);
 }
