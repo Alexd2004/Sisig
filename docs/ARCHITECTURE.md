@@ -1,470 +1,425 @@
 # Sisig Platform Architecture Guide
 
-**Version 1.0** | **Date:** October 28, 2024 | **Status:** Foundation Phase
+**Version 1.1** | **Updated:** November 2026 | **Describes:** `main` at `cd47f1e` (PR #19)
+
+This guide explains how the Sisig Eh! rewards app fits together: the apps and packages in the monorepo, how they build, how navigation and sign-in gating work, how the session and data layer behave, and how the theme reaches components. Database detail lives in [SUPABASE.md](SUPABASE.md). Running the app on an Android emulator is covered in [LOCAL-DEVELOPMENT.md](LOCAL-DEVELOPMENT.md).
 
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [DATA-01: Database Architecture](#data-01-database-architecture)
-3. [PLAT-02: Navigation Architecture](#plat-02-navigation-architecture)
-4. [THEME-01: Design System](#theme-01-design-system)
-5. [Integration Points](#integration-points)
-6. [Development Workflow](#development-workflow)
-7. [Deployment Strategy](#deployment-strategy)
+2. [Monorepo and Build Order](#monorepo-and-build-order)
+3. [DATA-01: Database Architecture](#data-01-database-architecture)
+4. [PLAT-02: Navigation Architecture](#plat-02-navigation-architecture)
+5. [PLAT-03: Session and Data Layer](#plat-03-session-and-data-layer)
+6. [THEME-01: Design System](#theme-01-design-system)
+7. [Claude Integration](#claude-integration)
+8. [Integration Points](#integration-points)
+9. [Development Workflow](#development-workflow)
+10. [Deployment Strategy](#deployment-strategy)
+11. [Summary of Key Decisions](#summary-of-key-decisions)
+12. [Next Steps](#next-steps)
+13. [Related Documents](#related-documents)
 
 ---
 
 ## Overview
 
-The Sisig platform is a mobile-first ordering application built with:
+Sisig is a mobile-first rewards and ordering app. The repository is a pnpm workspace orchestrated by Turborepo.
 
-- **Frontend:** React Native (Expo) with TypeScript strict mode
-- **Backend:** Supabase (PostgreSQL + Edge Functions)
-- **Design:** Semantic tokens with light/dark theme support
-- **Architecture:** Monorepo (pnpm) with Turborepo caching
+| Part | Path | What it is today |
+|------|------|------------------|
+| Mobile app | `apps/mobile` | Expo SDK 51 (React Native 0.74, React 18.2), Expo Router 3, TypeScript strict mode. Runs as a development build (a "dev client": a debug build of the app with Expo's developer tools). Expo Go is not supported. |
+| Admin app | `apps/admin` | A `package.json` only. Every script echoes a placeholder message. The framework choice is planned (ADM-01). |
+| `@sisig/ui` | `packages/ui` | Brand tokens, Tamagui config, theme hooks, and the `Button`, `Text` and `TextInput` components. |
+| `@sisig/api` | `packages/api` | Supabase client factory, error normalisation, QueryClient factory, query keys, persistence allowlist, menu query hooks, order and redeem mutations, generated database types. |
+| `@sisig/claude` | `packages/claude` | A wrapper around `@anthropic-ai/sdk` plus helper functions. No screen calls it yet (see [Claude Integration](#claude-integration)). |
+| `@sisig/config` | `packages/config` | Shared `tsconfig.json`, ESLint and Prettier config. |
+| Supabase | `supabase/` | Migrations, pgTAP tests, seed data, local stack config, and Edge Functions (`whoami` plus `_shared` helpers). |
 
-### High-Level Stack
+Most screens are still placeholders. Home, Order, Rewards and Code show hard-coded sample content, and the auth screens are placeholders until AUTH-01 to AUTH-03. No screen reads data from Supabase yet. Today the app talks to Supabase Auth only: it restores the session, refreshes tokens, and signs out.
 
+```mermaid
+flowchart LR
+  subgraph apps["apps/"]
+    mobile["mobile<br/>Expo SDK 51 dev client"]
+    admin["admin<br/>placeholder, ADM-01"]
+  end
+  subgraph pkgs["packages/"]
+    ui["@sisig/ui"]
+    api["@sisig/api"]
+    claude["@sisig/claude"]
+    config["@sisig/config"]
+  end
+  subgraph supa["Supabase"]
+    auth["Auth"]
+    rest["PostgREST"]
+    edge["Edge Functions<br/>whoami"]
+    db[("Postgres<br/>public and private schemas")]
+  end
+  anthropic["Claude API"]
+
+  mobile --> ui
+  mobile --> api
+  mobile --> claude
+  admin -.-> config
+  api -->|"getSession, token refresh, signOut"| auth
+  api -.->|"query hooks exist, no screen uses them"| rest
+  claude -.->|"no screen calls it"| anthropic
+  rest --> db
+  auth -->|"custom_access_token_hook"| db
+  edge -.->|"verifies caller via /auth/v1/user"| auth
 ```
-┌─────────────────────────────────────────┐
-│      Mobile App (React Native/Expo)     │
-│  (Tabs: Home, Order, Rewards, Code, More)
-└──────────────┬──────────────────────────┘
-               │ HTTP/REST
-               ▼
-┌─────────────────────────────────────────┐
-│   API Layer (Supabase PostgREST)        │
-│  (Auto-generated from PostgreSQL schema)
-└──────────────┬──────────────────────────┘
-               │
-     ┌─────────┴──────────────┐
-     ▼                        ▼
-┌──────────────┐    ┌─────────────────┐
-│  PostgreSQL  │    │ Edge Functions  │
-│   Database   │    │  (Deno/TypeScript)
-└──────────────┘    └─────────────────┘
+
+Solid arrows are calls the app makes on `main`. Dotted arrows are code that exists but that the app never runs, including the `whoami` Edge Function, which the app does not call yet.
+
+---
+
+## Monorepo and Build Order
+
+`pnpm-workspace.yaml` includes `apps/*` and `packages/*`. Each app depends on shared packages through `workspace:*` versions, so pnpm links them as symlinks into the app's `node_modules`.
+
+| Workspace | Build script | Workspace dependencies |
+|-----------|--------------|------------------------|
+| `@sisig/mobile` | `expo build` (the local Expo CLI rejects it; release builds are planned, DEVOPS-04) | `@sisig/ui`, `@sisig/api`, `@sisig/claude`; `@sisig/config` (dev) |
+| `@sisig/admin` | echo placeholder | `@sisig/config` (dev) |
+| `@sisig/ui` | `tsc` to `dist/` | `@sisig/config` (dev) |
+| `@sisig/api` | `tsc` to `dist/` | `@sisig/config` (dev) |
+| `@sisig/claude` | `tsc` to `dist/` | `@sisig/config` (dev) |
+| `@sisig/config` | none | none |
+
+```mermaid
+flowchart LR
+  mobile["@sisig/mobile"]
+  admin["@sisig/admin"]
+  ui["@sisig/ui"]
+  api["@sisig/api"]
+  claude["@sisig/claude"]
+  config["@sisig/config<br/>no build step"]
+  tamagui["@tamagui/core 1.144.4"]
+  supabasejs["@supabase/supabase-js"]
+  tanstack["@tanstack/react-query"]
+  sdk["@anthropic-ai/sdk ^0.24"]
+
+  mobile --> ui
+  mobile --> api
+  mobile --> claude
+  mobile -.->|dev| config
+  admin -.->|dev| config
+  ui -.->|dev| config
+  api -.->|dev| config
+  claude -.->|dev| config
+  ui --> tamagui
+  api --> supabasejs
+  api --> tanstack
+  claude --> sdk
 ```
+
+Workspace dependencies come from each `package.json`. Solid arrows are runtime dependencies; dotted arrows are dev dependencies. The bottom row shows the main third-party library behind each package.
+
+### How Turborepo orders the work
+
+`turbo.json` gives `build`, `dev`, `typecheck` and `test` a `^build` dependency: before a task runs in a workspace, Turborepo runs `build` in every workspace it depends on. `build` caches `dist/**`, `.expo/**` and `build/**`.
+
+### How Metro finds the shared packages
+
+There is no `metro.config.js`. Expo's default Metro config (from `expo/metro-config`) detects the workspace root. Each shared package's `package.json` points `main`, `types` and `exports` at `dist/index.js` and `dist/index.d.ts`. So Metro, Jest and `tsc` all read the built output, not `src/`. A fresh clone, or any change under `packages/*/src`, needs a build before Metro can serve it:
+
+```bash
+pnpm turbo run build --filter='@sisig/mobile^...'
+```
+
+The `^...` suffix selects every workspace the mobile app depends on, but not the app itself, whose `build` script would fail. After you pull new dependencies, restart Metro with `--clear`. CI runs the same build before it bundles the app with `expo export --platform android` (added in PR #16).
+
+```mermaid
+flowchart TB
+  cmd["pnpm turbo run build<br/>--filter='@sisig/mobile^...'"]
+  cfg["@sisig/config<br/>no build script, nothing to run"]
+  tsc["tsc runs in parallel:<br/>@sisig/ui, @sisig/api, @sisig/claude"]
+  dist["packages/*/dist<br/>index.js and .d.ts files"]
+  metro["Metro, Jest and tsc in apps/mobile<br/>resolve @sisig/* through main and exports"]
+  run["expo start --dev-client<br/>or expo export in CI"]
+
+  cmd --> cfg
+  cfg --> tsc
+  tsc --> dist
+  dist --> metro
+  metro --> run
+```
+
+The three package builds only depend on `@sisig/config`, so they run side by side. The app reads their `dist/` output, so a stale `dist/` means stale code on the device.
 
 ---
 
 ## DATA-01: Database Architecture
 
-### Design Philosophy
+The full Supabase guide is [SUPABASE.md](SUPABASE.md). Conventions for migrations, policies and functions are in [supabase/CONVENTIONS.md](../supabase/CONVENTIONS.md). In short:
 
-**Principle:** Versioned, forward-only migrations with strong data governance through Row-Level Security.
-
-### Schema Design
-
-#### Public Schema (API-Exposed)
-
-These tables are automatically exposed via PostgREST and accessible to authenticated clients:
-
-```sql
-public.users                  -- User profiles + roles
-public.products               -- Menu items
-public.orders                 -- Customer orders
-public.order_items            -- Order line items
-public.loyalty_points         -- Points balance
-public.loyalty_transactions   -- Points history
-```
-
-#### Private Schema (Internal Only)
-
-Sealed off from PostgREST; used for scheduled jobs and internal state:
-
-```sql
-private.job_runs  -- Logging for pg_cron scheduled jobs
-```
-
-### Key Decisions
-
-#### 1. **Row-Level Security (RLS) as First-Class Citizen**
-
-**Decision:** Every table in the public schema has RLS enabled with explicit policies.
-
-**Why:**
-- Database-level access control is more secure than application-level checks
-- Policies travel with data; no way to accidentally expose private data
-- Scales to multi-tenant scenarios easily
-
-**Example Policy:**
-```sql
-create policy "Users can view their own profile"
-  on public.users
-  for select
-  using (auth.uid() = id);
-```
-
-**Trade-off:** Policies must be written carefully; a missing policy = no access.
-
-#### 2. **Auth-Managed Users + Custom Profiles**
-
-**Decision:** Link `auth.users` (managed by Supabase) with `public.users` (custom data).
-
-**Why:**
-- `auth.users` is immutable; we can't modify its schema
-- `public.users` holds roles, avatars, and custom metadata
-- Auto-trigger creates `public.users` row on signup
-
-**Implementation:**
-```sql
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute procedure public.handle_new_user();
-```
-
-**Trade-off:** Two tables to join, but cleaner separation of concerns.
-
-#### 3. **Price Stored in Cents**
-
-**Decision:** All currency values are integers (e.g., 1999 = $19.99).
-
-**Why:**
-- No floating-point precision errors
-- Easier to perform math on prices
-- Standard in payment processing
-
-**Implementation:**
-```sql
-create table public.products (
-  price integer not null comment 'Price in cents'
-);
-```
-
-#### 4. **Job Logging via pg_cron**
-
-**Decision:** All scheduled jobs write start/end/count/error to `private.job_runs`.
-
-**Why:**
-- Single source of truth for job execution history
-- Easy to monitor job health (last run, error rate)
-- Separate table isolates job logs from business data
-
-**Usage Pattern:**
-```sql
--- Schedule a job
-select cron.schedule(
-  'process_loyalty_daily',
-  '0 2 * * *',  -- 2 AM daily
-  'select process_loyalty_transactions();'
-);
-
--- Function logs itself
-create or replace function process_loyalty_transactions()
-returns void as $$
-begin
-  insert into private.job_runs (job_name, status)
-  values ('process_loyalty_daily', 'running');
-  
-  -- Do work...
-  
-  update private.job_runs
-  set status = 'success', ended_at = now(), rows_processed = X
-  where job_name = 'process_loyalty_daily';
-exception when others then
-  update private.job_runs
-  set status = 'error', error_message = SQLERRM
-  where job_name = 'process_loyalty_daily';
-end;
-$$ language plpgsql security definer set search_path = '';
-```
-
-#### 5. **SECURITY DEFINER Functions Require Explicit search_path**
-
-**Decision:** All `security definer` functions include `set search_path = ''`.
-
-**Why:**
-- Prevents schema injection attacks
-- Function always sees the schema it intends, not attackers'
-- Forces explicit qualification of all references
-
-**Example:**
-```sql
--- ✅ Safe
-create function handle_new_user() returns trigger as $$
-begin
-  insert into public.users (id, email) values (new.id, new.email);
-  return new;
-end;
-$$ language plpgsql security definer set search_path = '';
-
--- ❌ Unsafe (don't do this)
-create function handle_new_user() returns trigger as $$
-begin
-  insert into users (id, email) values (new.id, new.email);
-  return new;
-end;
-$$ language plpgsql security definer;
-```
-
-### Migration Strategy
-
-#### Forward-Only Migrations
-
-- Never modify an applied migration
-- If you find a bug, write a new migration to fix it
-- This ensures consistency across all environments
-
-#### One Concern Per Migration
-
-Each file handles a single logical change:
-
-- `20261028000000_init_schemas.sql` — schemas and extensions
-- `20261028000001_init_users.sql` — user tables and RLS
-- `20261028000002_init_products.sql` — products and RLS
-- `20261028000003_init_orders_and_rewards.sql` — orders and loyalty
-
-#### Handling Timestamp Conflicts
-
-If two devs create migrations with the same timestamp:
-
-```bash
-# Rebase onto latest main
-git rebase origin/main
-
-# Regenerate migration timestamps
-pnpm db:reset
-
-# Commit with new timestamps
-git add supabase/migrations/
-git commit -m "fix: regenerate migration timestamps after rebase"
-```
-
-### TypeScript Types
-
-**Decision:** Generate TypeScript types from the database schema.
-
-**Implementation:**
-```bash
-pnpm db:types  # Outputs to packages/api/src/database.types.ts
-```
-
-**Why:**
-- Single source of truth (database schema)
-- Type-safe queries across frontend and backend
-- CI fails if schema changes aren't reflected in types
-
-**Usage:**
-```typescript
-import type { Database } from '@sisig/api';
-
-type User = Database['public']['Tables']['users']['Row'];
-type Order = Database['public']['Tables']['orders']['Insert'];
-
-async function getUser(id: string): Promise<User> {
-  const { data, error } = await supabase
-    .from('users')
-    .select()
-    .eq('id', id)
-    .single();
-
-  if (error) throw error;
-  return data as User;
-}
-```
-
-### Testing Strategy
-
-**Tool:** pgTAP (TAP tests for PostgreSQL)
-
-**Location:** `supabase/tests/database/`
-
-**Example Test:**
-```sql
-begin;
-select plan(3);
-
-select has_table('public', 'users', 'users table exists');
-select has_column('public', 'users', 'email', 'email column exists');
-select policies_are(
-  'public', 'users',
-  array['Users can view their own profile', ...],
-  'users table has correct policies'
-);
-
-select * from finish();
-rollback;
-```
-
-**Run Tests:**
-```bash
-pnpm db:test
-```
+- **Postgres on Supabase.** Forward-only migrations live in `supabase/migrations/`. Never edit an applied migration; add a new one.
+- **Row-Level Security (RLS).** Every table created in the `public` schema enables RLS. The `private` schema holds internal functions (for example `custom_access_token_hook`) and is not exposed through PostgREST.
+- **Current `public` tables** (from `packages/api/src/database.types.ts`): `profiles`, `user_roles`, `products`, `orders`, `order_items`, `locations`, `loyalty_settings`, `points_ledger`, `point_balances`, `rewards` and `reward_redemptions`.
+- **PR #19 (DATA-04)** dropped `public.users`, the `user_role` enum, and the legacy `loyalty_points` and `loyalty_transactions` tables. Identity now lives in `profiles` and `user_roles` (DATA-02). Loyalty now uses the ledger tables above.
+- **Money is integer cents**, with non-negative checks.
+- **Points change only through RPCs** (database functions called over PostgREST). The posting and redemption RPCs are planned (LOY-01, LOY-03, LOY-04).
+- **Tests and types.** pgTAP tests live in `supabase/tests/database/` (`pnpm db:test`). `pnpm db:types` regenerates the TypeScript types from the local stack, and the CI `types-drift` job fails if the committed file differs.
 
 ---
 
 ## PLAT-02: Navigation Architecture
 
-### Design Philosophy
+The app uses Expo Router 3, which turns files under `apps/mobile/app/` into routes. The entry point is `expo-router/entry` (`main` in `apps/mobile/package.json`). Folders in parentheses, such as `(tabs)` and `(auth)`, are route groups: they share a layout but do not appear in the URL, so `app/(auth)/login.tsx` is `/login`.
 
-**Principle:** Bottom-tab navigation with nested stack per tab, supporting both authenticated and guest flows.
+### Route tree
 
-### Navigation Structure
+```mermaid
+flowchart TB
+  root["app/_layout.tsx<br/>root Stack and RootNavigator"]
+  index["index.tsx<br/>Redirect to /home"]
+  tabs["(tabs)/_layout.tsx<br/>bottom Tabs"]
+  home["home/<br/>/home"]
+  order["order/<br/>/order"]
+  rewards["rewards/<br/>/rewards, SignInRequired"]
+  codetab["code/<br/>/code, SignInRequired"]
+  more["more/<br/>/more"]
+  authg["(auth)/_layout.tsx<br/>Stack"]
+  welcome["welcome.tsx"]
+  login["login.tsx"]
+  signup["sign-up.tsx"]
+  verify["verify-email.tsx"]
+  reset["reset-password.tsx"]
+  redeem["redeem-confirm.tsx<br/>modal"]
+  item["item/[id].tsx<br/>modal"]
+  ai["ai-chat, ai-journal,<br/>ai-summarizer, ai-translator"]
 
-```
-Root Layout (_layout.tsx)
-├── Session Restoration Gate
-├── (tabs) Group
-│   ├── Home Stack (home.tsx)
-│   ├── Order Stack (order.tsx)
-│   ├── Rewards Stack (rewards.tsx)
-│   ├── Code Stack (code.tsx)
-│   └── More Stack (more.tsx)
-└── (auth) Group (for login/signup)
-    ├── Welcome
-    ├── Login
-    ├── Sign Up
-    └── Verify Email
-```
-
-### Key Decisions
-
-#### 1. **Expo Router File-Based Routing**
-
-**Decision:** Use Expo Router's file-based routing, not React Navigation directly.
-
-**Why:**
-- Deep linking works automatically
-- Type-safe route names via auto-inference
-- File system is the source of truth for routes
-- Easier to refactor (move file = move route)
-
-**File → Route Mapping:**
-- `app/(tabs)/home.tsx` → `/home` (authenticated)
-- `app/(auth)/login.tsx` → `/login` (guest)
-- `app/ai-chat.tsx` → `/ai-chat` (root)
-
-#### 2. **Session Restoration Gating**
-
-**Decision:** Block navigation until auth session is restored from SecureStore.
-
-**Why:**
-- Avoids flash of wrong UI on cold start
-- Splash screen stays visible until session is known
-- Prevents race conditions (user sees login then tabs)
-
-**Implementation:**
-```typescript
-// Root layout
-const [isSessionRestored, setIsSessionRestored] = useState(false);
-
-useEffect(() => {
-  const restoreSession = async () => {
-    try {
-      const session = await supabase.auth.getSession();
-      // TODO: Restore from SecureStore for native persistence
-    } finally {
-      setIsSessionRestored(true);
-      await SplashScreen.hideAsync();
-    }
-  };
-  restoreSession();
-}, []);
-
-if (!isSessionRestored) return <Stack />; // Splash stays visible
-return <Stack screenOptions={{ headerShown: false }} />;
+  root --> index
+  root --> tabs
+  root --> authg
+  root --> redeem
+  root --> item
+  root --> ai
+  tabs --> home
+  tabs --> order
+  tabs --> rewards
+  tabs --> codetab
+  tabs --> more
+  authg --> welcome
+  authg --> login
+  authg --> signup
+  authg --> verify
+  authg --> reset
 ```
 
-#### 3. **Bottom Tab Navigation with 5 Tabs**
+Each tab is a folder with its own `_layout.tsx` (a Stack) and an `index.tsx` screen. The Rewards and Code layouts wrap their Stack in `SignInRequired`. No screen links to `item/[id]` or to the four AI routes yet.
 
-**Decision:** Fixed 5-tab bottom navigation (Home, Order, Rewards, Code, More).
+### Root layout
 
-**Why:**
-- Quick access to key features
-- Tap active tab = pop to root (standard iOS/Android UX)
-- Each tab can have its own stack
+`app/_layout.tsx` nests the providers in this order: `AppThemeProvider` (theme), `PersistQueryClientProvider` (query cache with disk persistence), `SessionProvider` (session status), then `RootNavigator`.
 
-**Tabs:**
-- **Home** — Featured items, promos, quick links
-- **Order** — Browse menu and place orders
-- **Rewards** — View points and redeem rewards
-- **Code** — Show QR code / customer ID at counter
-- **More** — Settings, order history, about, sign out
+At module level, `app/_layout.tsx` calls `SplashScreen.preventAutoHideAsync()`, so the splash screen stays up. `RootNavigator` then:
 
-#### 4. **Tab Stack Isolation**
+- Renders nothing until the session status is no longer `loading` and the Inter fonts have loaded or failed. A font failure falls back to the system font.
+- Computes `resolveAuthRedirect` from the status, the route segments and a `returnTo` search parameter, and calls `router.replace` when it returns a path.
+- Watches for a change from `signed-in` to `signed-out`. It then calls `router.dismissAll()` and `router.replace('/welcome')`.
+- Declares `redeem-confirm` and `item/[id]` as modal screens.
 
-**Decision:** Each tab has its own navigation stack; doesn't share state with other tabs.
+### Auth gating and redirects
 
-**Why:**
-- Tapping active tab pops to root (expected behavior)
-- Back button doesn't leak between tabs
-- Cleaner state management per tab
-
-**Implementation:**
-```typescript
-<Tabs>
-  <Tabs.Screen name="home" options={...} />
-  <Tabs.Screen name="order" options={...} />
-  {/* Each is its own stack; changes here don't affect other tabs */}
-</Tabs>
+```mermaid
+flowchart TB
+  launch["App launch"] --> wait{"Session status known and<br/>fonts loaded or failed?"}
+  wait -->|"no: render nothing, splash stays"| wait
+  wait -->|yes| mount["Hide splash and mount root Stack"]
+  mount --> route["Current route<br/>cold start: index.tsx redirects to /home"]
+  route --> gate{"resolveAuthRedirect:<br/>signed in and inside (auth)?"}
+  gate -->|yes| ret["router.replace to returnTo if it is a tab path,<br/>otherwise /home"]
+  gate -->|no| which{"Which screen?"}
+  which -->|"Home, Order, More, auth or modal"| open["Screen renders"]
+  which -->|"Rewards or Code"| sir{"SignInRequired:<br/>signed in?"}
+  sir -->|yes| open
+  sir -->|no| prompt["Sign-in prompt"]
+  prompt -->|"Sign in button"| login["router.push /login<br/>with returnTo"]
+  out["Status changes from<br/>signed-in to signed-out"] --> welcome["router.dismissAll, then<br/>router.replace /welcome"]
 ```
 
-#### 5. **Session State Determines Visible Stack**
+Guests can browse Home, Order and More. Rewards and Code show a sign-in prompt instead of their stack. `sanitizeReturnTo` only accepts the five tab paths, so a `returnTo` parameter cannot send a user anywhere else. The login screen is a placeholder until AUTH-01 to AUTH-03, so nobody can sign in from the app yet.
 
-**Decision:** Root layout gates between (tabs) and (auth) based on `auth.session()`.
+### Tabs
 
-**Why:**
-- Single source of truth (session state)
-- Users can't reach protected tabs without auth
-- Clean separation of authenticated and guest experiences
+- Five tabs: Home, Order, Rewards, Code, More. Each has a `tabBarAccessibilityLabel` (for example "Rewards tab") and a Material Community icon.
+- The Tabs layout hides its own header. Each tab's Stack draws the header with colours from `useStackScreenOptions` (`src/navigation/stack-options.ts`).
+- Tapping the active tab pops that tab's stack to its root. `popTabStackToRoot` (`src/navigation/pop-to-root.ts`) dispatches `POP_TO_TOP` to the nested stack only, so other tabs keep their stacks.
+- The More tab shows Sign In (opens `/login` with `returnTo=/more`) or Sign Out (calls `useSession().signOut`). Its other menu items only log to the console for now.
 
-**Pseudo-Code:**
-```typescript
-return session ? <Stack name="(tabs)" /> : <Stack name="(auth)" />;
+### What each screen shows today
+
+| Route | Content on `main` |
+|-------|-------------------|
+| `/home` | Static welcome text, a sample special, "You have 0 points", and a list of quick links. |
+| `/order` | Three hard-coded sample items with Add buttons that do nothing, and a $0.00 cart total. |
+| `/rewards` | Points shown as 0, three sample rewards whose Redeem buttons open `/redeem-confirm`, and a "How it works" card. |
+| `/code` | A placeholder QR area and a sample code behind a Show Code toggle. While the code is hidden, a leftover "Sign in to view your code" card with a Sign In button shows, even to signed-in users, and the button does nothing. |
+| `/more` | Menu items and the Sign In or Sign Out item. |
+| `(auth)` screens | `PlaceholderScreen` with a note saying the real screen is built in AUTH-01 to AUTH-03. Welcome has Log in, Sign up and Continue as guest buttons. |
+| `/redeem-confirm`, `/item/[id]` | `PlaceholderScreen` with a note saying the real screen is built in a later ticket. |
+
+### Keep tests out of `app/`
+
+Expo Router treats every file under `app/` as a route, including test files. A test file there gets bundled as a screen and crashes the app on the device with "Property 'jest' doesn't exist". PR #18 moved the only such test to `src/navigation/index-redirect.test.tsx`. Put tests under `src/` and import screens with a relative path such as `../../app/index`.
+
+---
+
+## PLAT-03: Session and Data Layer
+
+The shared code is in `packages/api`. The mobile wiring is in `apps/mobile/src/lib` and `apps/mobile/src/session`. PR #12 isolated the logout purge steps and made key creation single-flight. PR #15 connected the Supabase session source and the purge on sign-out.
+
+### Supabase client
+
+`src/lib/supabase.ts` creates the app's only Supabase client and QueryClient:
+
+1. It reads `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`. Expo inlines `EXPO_PUBLIC_*` values into the bundle at build time, so only public values may use that prefix. The anon key is Supabase's publishable key. If either value is missing, the module throws when the app starts.
+2. `createSupabaseClient(nativeSessionStorage, { url, anonKey })` (`@sisig/api`) calls `createClient` with the encrypted storage adapter, `autoRefreshToken: true`, `persistSession: true` and `detectSessionInUrl: false`.
+3. `createQueryClient()` builds the QueryClient.
+4. `attachSessionLifecycle(supabase, AppState)` runs token auto-refresh only while the app is in the foreground. It stops refresh when the app goes to the background or becomes inactive, and starts it again when the app is active.
+
+### Encrypted session storage
+
+`src/lib/session-storage.ts` is the `auth.storage` adapter that supabase-js uses for the session:
+
+- A random 256-bit AES key (from `expo-crypto`) is stored in the device keystore through `expo-secure-store`, under `sisig_session_key`, with `AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`.
+- Every value is encrypted with AES-256-GCM (`@noble/ciphers`) under a fresh 96-bit nonce. The ciphertext goes to AsyncStorage under `sisig.secure.v1:<key>` as JSON with `v`, `iv` and `ct` fields. Tokens never reach AsyncStorage in plaintext.
+- Only the key lives in SecureStore, because a Supabase session can be larger than the roughly 2 KB a SecureStore value is meant to hold.
+- An entry that fails to decrypt (tampered data, or the key was reset) returns `null` and is deleted, so the user signs in again. A keystore read error returns `null` but keeps the entry.
+- Concurrent first writes share one key-creation promise, so two writes cannot each create a key.
+- `clearSessionStorage()` removes every sealed entry and two legacy keys, and deletes the AES key. Both steps run even if one fails.
+
+### Session lifecycle
+
+`SessionProvider` (`src/session/session.tsx`) exposes `status` (`loading`, `signed-in` or `signed-out`) and `signOut` through `useSession()`. It takes a `SessionSource` with three methods: `restore`, `subscribe` and `signOut`. The app passes `createSupabaseSessionSource(supabase, queryClient)`, created once at module load in `app/_layout.tsx`.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant More as More screen
+  participant Nav as RootNavigator
+  participant Prov as SessionProvider
+  participant Src as Supabase session source
+  participant Auth as supabase.auth
+  participant Store as nativeSessionStorage
+  participant Purge as signOutAndPurge
+
+  Prov->>Src: subscribe(listener)
+  Src->>Auth: onAuthStateChange(callback)
+  Prov->>Src: restore()
+  Src->>Auth: getSession()
+  Auth->>Store: getItem(session key)
+  Store-->>Auth: decrypted session or null
+  Auth-->>Src: data.session
+  Src-->>Prov: signed-in or signed-out
+  Note over Prov: Ignored if an auth event arrived first
+  Prov-->>Nav: status is known, splash hides
+  Auth-)Src: auth event with session or null
+  Src-)Prov: signed-in if a session exists, else signed-out
+  alt User taps Sign Out on the More tab
+    More->>Prov: useSession().signOut()
+    Prov->>Src: signOut()
+    Note over Src: signOutsInFlight becomes 1
+    Src->>Purge: signOutAndPurge(client, queryClient)
+    Purge->>Auth: signOut with scope local
+    Auth-)Src: SIGNED_OUT
+    Note over Src: A sign-out is in flight, so no second purge
+    Src-)Prov: signed-out
+    Purge->>Purge: clear query cache, session storage, persisted cache
+    Purge-->>Src: resolves, or rethrows the sign-out error
+    Note over Src: signOutsInFlight back to 0
+  else Session ends elsewhere, for example a rejected refresh token
+    Auth-)Src: SIGNED_OUT
+    Note over Src: No sign-out in flight, so start the purge
+    Src->>Purge: signOutAndPurge(client, queryClient)
+    Src-)Prov: signed-out
+  end
+  Prov-->>Nav: status signed-out
+  Nav->>Nav: dismissAll, then replace /welcome
 ```
 
-#### 6. **Accessibility First**
+The source maps every auth event to `signed-in` or `signed-out` by whether a session is present. It purges on every `SIGNED_OUT`, and the in-flight counter stops the `SIGNED_OUT` that its own `auth.signOut` call emits from starting a second purge.
 
-**Decision:** Every tab has `tabBarAccessibilityLabel` and screens use semantic color names.
+### Logout purge
 
-**Why:**
-- VoiceOver and TalkBack users can distinguish tabs
-- Dark mode contrast is automatic via semantic colors
-- WCAG AA compliance built in
+`signOutAndPurge` (`src/lib/logout.ts`) runs these steps in order:
 
-**Example:**
-```typescript
-<Tabs.Screen
-  name="rewards"
-  options={{
-    tabBarAccessibilityLabel: 'Rewards tab',
-    tabBarIcon: ({ color }) => <TabBarIcon name="star" color={color} />,
-  }}
-/>
+1. `queryClient.cancelQueries()`.
+2. `client.auth.signOut({ scope: 'local' })`. auth-js removes the local session even when the network call fails, and reports that failure as `{ error }` instead of throwing.
+3. `queryClient.clear()` (in-memory cache).
+4. `clearSessionStorage()` (sealed entries and the AES key).
+5. `clearPersistedQueries()` (the query cache on disk).
+
+Steps 3 to 5 each run in their own `try`/`catch`, and a failure is logged, not thrown. A sign-out failure, thrown or returned, is rethrown after the purge, so a purge error never replaces it. Any new per-user store must be added to this function.
+
+### Queries, mutations and the persisted cache
+
+- **QueryClient** (`packages/api/src/query-client.ts`): queries default to a 60-second `staleTime`. `shouldRetryQuery` retries only network and 5xx failures, up to 3 times. Mutations never retry.
+- **Query keys** (`packages/api/src/query-keys.ts`): every key comes from the `keys` factory (`auth`, `menu`, `orders`, `loyalty`, `profile`). Invalidate by prefix, for example `keys.menu.all()`.
+- **Query hooks** (`packages/api/src/hooks/useMenu.ts`): `useMenu` (5-minute `staleTime`), `menuCategoriesQueryOptions` and `useMenuCategories` (10 minutes), and `useProduct` (5 minutes). Each takes the Supabase client as an argument.
+- **Mutations** (`packages/api/src/mutations.ts`): `useCreateOrder` inserts into `orders` and `order_items` and invalidates `keys.orders.all()`. `useRedeemPoints` always throws `redeem_loyalty_reward RPC is not implemented yet` until the redemption RPC exists (planned, LOY-03). Both keep their invalidation when a caller passes its own `onSuccess` (PR #11). `optimisticUpdate` applies an update and rolls it back on error.
+- **Persisted cache** (`apps/mobile/src/lib/query-persistence.ts`): `PersistQueryClientProvider` writes the cache to AsyncStorage under `sisig.query-cache`, unencrypted, with a 24-hour `maxAge` and buster `v1`. Only successful queries whose key starts with an allowlisted prefix are written: `['menu']` and `['loyalty', 'rewards']`. Points, profile, orders and auth are never written to disk, and mutations are never persisted.
+
+No screen calls these hooks or mutations yet.
+
+### Error normalisation
+
+Queries and mutations throw `normalizeError(error)` (`packages/api/src/client.ts`). The exception is `useRedeemPoints`, which makes no request and throws a plain `Error` until its RPC exists. It returns an `AppError` with a fixed, user-safe `message` and a stable `code`. The raw error stays in `details`.
+
+| Source | Condition | `code` |
+|--------|-----------|--------|
+| PostgREST | empty code (no HTTP response) | `NETWORK_ERROR` |
+| PostgREST | `42501` or `PERM` (RLS denied) | `PERMISSION_DENIED` |
+| PostgREST | `PGRST301` (JWT rejected) | `SESSION_EXPIRED` |
+| PostgREST | `PGRST116` or `NTFND` | `NOT_FOUND` |
+| PostgREST | `23505` (unique violation) | `DUPLICATE` |
+| PostgREST | any other code | `DATABASE_ERROR` |
+| Auth | retryable fetch error / session missing / `invalid_credentials` | `NETWORK_ERROR` / `UNAUTHORIZED` / `INVALID_CREDENTIALS` |
+| Auth | `session_not_found` or status 401 / status 500 or more / other | `SESSION_EXPIRED` / `SERVER_ERROR` / `AUTH_ERROR` |
+| Edge Functions | HTTP 401 / 403 / 500 or more / other | `UNAUTHORIZED` / `FORBIDDEN` / `SERVER_ERROR` / `FUNCTION_ERROR` |
+| Edge Functions | relay error / fetch error | `SERVER_ERROR` / `NETWORK_ERROR` |
+| Anything else | | `UNKNOWN_ERROR` |
+
+`isRetryableError` is true only for `NETWORK_ERROR` and `SERVER_ERROR`.
+
+```mermaid
+flowchart TB
+  env[".env.local<br/>EXPO_PUBLIC_SUPABASE_URL<br/>EXPO_PUBLIC_SUPABASE_ANON_KEY"]
+  sbfile["src/lib/supabase.ts<br/>throws if either value is missing"]
+  factory["createSupabaseClient<br/>@sisig/api"]
+  adapter["nativeSessionStorage<br/>AES-256-GCM"]
+  secure[("expo-secure-store<br/>AES key")]
+  async1[("AsyncStorage<br/>sisig.secure.v1:* ciphertext")]
+  life["attachSessionLifecycle<br/>refresh only while active"]
+  qc["createQueryClient<br/>staleTime 60 s, retry policy"]
+  hooks["useMenu, useMenuCategories, useProduct<br/>useCreateOrder, useRedeemPoints"]
+  keyf["keys factory<br/>query-keys.ts"]
+  norm["normalizeError<br/>AppError with safe message and code"]
+  rest["Supabase PostgREST"]
+  persist["PersistQueryClientProvider<br/>persistOptions"]
+  allow{"Successful query with a<br/>menu or loyalty rewards key?"}
+  async2[("AsyncStorage<br/>sisig.query-cache")]
+  mem["Memory only"]
+
+  env --> sbfile
+  sbfile --> factory
+  adapter -->|"auth.storage"| factory
+  adapter --> secure
+  adapter --> async1
+  sbfile --> life
+  sbfile --> qc
+  hooks --> keyf
+  hooks -->|"client.from(...)"| rest
+  hooks -->|"on error, except useRedeemPoints"| norm
+  qc --> persist
+  persist --> allow
+  allow -->|yes| async2
+  allow -->|no| mem
 ```
 
-### Screen Descriptions
-
-#### Home (home.tsx)
-- Featured items
-- Daily specials
-- Quick links to other tabs
-- Loyalty points summary
-
-#### Order (order.tsx)
-- Menu items (fetch from `public.products`)
-- Add to cart
-- Checkout flow (POST to `public.orders`)
-
-#### Rewards (rewards.tsx)
-- Loyalty points balance
-- Available redemptions
-- Points history (fetch from `public.loyalty_transactions`)
-- How it works explainer
-
-#### Code (code.tsx)
-- QR code generation (or placeholder)
-- Customer ID display
-- Tap to show/hide
-- Requires sign-in
-
-#### More (more.tsx)
-- Order history
-- My profile
-- Restaurant locations
-- Help & support
-- Settings
-- Sign out
+The session is encrypted on disk, while the persisted query cache is plain JSON, which is why only non-personal keys are on its allowlist. The hooks in the middle exist in `@sisig/api`, but no screen uses them yet.
 
 ---
 
@@ -472,222 +427,140 @@ return session ? <Stack name="(tabs)" /> : <Stack name="(auth)" />;
 
 ### Design Philosophy
 
-**Principle:** Semantic tokens define appearance; components reference tokens, not raw colors.
+**Principle:** semantic tokens define appearance. Components reference semantic names such as `primary` or `foregroundMuted`, never raw colours.
 
-### Token Hierarchy
+```mermaid
+flowchart LR
+  brand["theme/brand.ts<br/>palette, lightTheme, darkTheme,<br/>brandFonts, FONT_SCALE_CAP"]
+  tcfg["tamagui.config.ts<br/>createTamagui: tokens, themes,<br/>Inter fonts, shorthands"]
+  provider["AppThemeProvider<br/>TamaguiProvider and Theme,<br/>scheme from useColorScheme"]
+  hooks["useAppColors and useThemedStyles<br/>theme/hooks.ts"]
+  comps["Button, Text, TextInput<br/>@sisig/ui"]
+  screens["App screens<br/>StyleSheet factories"]
+  contrast["contrast.test.ts<br/>WCAG AA 4.5:1"]
+  noraw["no-raw-colors tests<br/>ui and mobile"]
 
-```
-Tokens (root)
-├── Primitive Colors (primaryLight, successDark, etc.)
-├── Semantic Names (primary, success, warning, danger)
-└── Theme Variants (light, dark)
-    └── Maps semantic names → primitive colors
-```
-
-### Semantic Token Strategy
-
-Instead of hard-coding colors, use semantic names:
-
-```typescript
-// ❌ Bad: Hard-coded colors
-<Text style={{ color: '#007AFF' }}>Buy Now</Text>
-
-// ✅ Good: Semantic token
-<Text style={{ color: '$primary' }}>Buy Now</Text>
-```
-
-**Benefits:**
-- Swap entire brand by changing token mapping (no component code changes)
-- Theme switching (light/dark) is automatic
-- Consistent across app
-
-### Color Tokens
-
-#### Primitive Colors
-
-These are actual hex values:
-
-```typescript
-const tokens = {
-  color: {
-    primaryLight: '#007AFF',    // iOS blue
-    primaryDark: '#0051D5',     // Darker blue for dark mode
-    successLight: '#34C759',    // iOS green
-    white: '#FFFFFF',
-    gray900: '#111827',
-  }
-};
+  brand --> tcfg
+  tcfg --> provider
+  provider --> hooks
+  hooks --> comps
+  hooks --> screens
+  comps --> screens
+  contrast -.->|checks| brand
+  noraw -.->|checks| screens
 ```
 
-#### Semantic Names
+Brand values live only in `brand.ts`. The Tamagui config turns them into themes, the provider picks light or dark from the OS, and the hooks hand resolved colours to components and screens. Two tests guard the chain.
 
-These map to primitives via the theme:
+### Tokens
 
-```typescript
-const light = {
-  primary: tokens.color.primaryLight,
-  primaryForeground: tokens.color.white,
-  success: tokens.color.successLight,
-  background: tokens.color.white,
-  foreground: tokens.color.gray900,
-};
+`packages/ui/src/theme/brand.ts` has three layers:
 
-const dark = {
-  primary: tokens.color.primaryDark,
-  primaryForeground: tokens.color.white,
-  success: tokens.color.successDark,
-  background: tokens.color.gray900,
-  foreground: tokens.color.white,
-};
-```
+- `palette`: the raw hex values. `tamagui.config.ts` registers them as Tamagui colour tokens, and the themes map semantic names to them. Components use the semantic names, not palette entries.
+- `SEMANTIC_TOKENS`: 20 names (`background`, `surface`, `surfaceMuted`, `foreground`, `foregroundMuted`, `placeholder`, `border`, `primary`, `primaryPressed`, `primaryForeground`, `accent`, `accentForeground`, `success`, `successForeground`, `warning`, `warningForeground`, `danger`, `dangerForeground`, `bubble`, `bubbleForeground`).
+- `lightTheme` and `darkTheme`: each maps every semantic name to a palette value.
+
+All values are placeholders until the client's brand palette and fonts arrive.
 
 ### Tamagui Configuration
 
-**Files:**
-- `packages/ui/src/theme/brand.ts`: the brand token file (palette, semantic light/dark themes, font names, font scale cap)
-- `packages/ui/src/tamagui.config.ts`: `createTamagui` composition, which reads only from the brand file
+- `packages/ui/src/tamagui.config.ts` calls `createTamagui` with size, space, radius and zIndex tokens, `palette` as the colour tokens, the `light` and `dark` themes, Tamagui shorthands, and `heading` and `body` fonts built with `createInterFont`. Settings include `allowedStyleValues: 'somewhat-strict'` and `disableRootThemeClass: true`.
+- Tamagui is pinned at 1.144.4 to stay on React 18.2, which the app runs.
+- The file declares `TamaguiCustomConfig` so Tamagui's types know the config:
 
-Tamagui 1.x is pinned because Tamagui 2.x and later require React 19; the app runs React 18.2.
-
-**Structure:**
-```typescript
-const config = createTamagui({
-  tokens,           // Primitive values (palette, size, space, radius, zIndex)
-  themes: {
-    light,          // Semantic mapping for light mode
-    dark,           // Semantic mapping for dark mode
-  },
-  shorthands,       // CSS shortcuts (p={}, m={}, etc.)
-  fonts,            // Font families
-  settings: {
-    allowedStyleValues: 'somewhat-strict',
-    fastGeneration: true,
-  },
-});
-```
-
-### Dynamic Type Support
-
-**Decision:** Respect OS Dynamic Type setting (font scaling) up to 1.5x max.
-
-**Why:**
-- Accessibility requirement (WCAG)
-- Users with vision impairments set larger system fonts
-- 1.5x cap prevents layouts from breaking
-
-**Implementation:** `Text` and `TextInput` from `@sisig/ui` set `maxFontSizeMultiplier` to `FONT_SCALE_CAP` (1.5) and clamp any larger caller value. App code must use these wrappers, not the react-native components.
-
-```typescript
-import { Text } from '@sisig/ui';
-
-<Text style={{ fontSize: 16 }}>
-  This text scales with OS setting, up to 1.5x
-</Text>
-```
-
-### Light/Dark Theme Switching
-
-**Decision:** Follow system `useColorScheme()` automatically; no in-app override in v1.
-
-**Why:**
-- Simple to implement (just read OS preference)
-- Consistent with platform conventions
-- Users expect app to follow system setting
-
-**Implementation:** `apps/mobile/src/components/AppThemeProvider.tsx` reads `useColorScheme()` and sets the Tamagui theme and status bar style. `app.json` sets `userInterfaceStyle: "automatic"`.
-
-### Placeholder Assets
-
-**Decision:** Use Google Fonts (Inter) and generic brand colors until client provides assets.
-
-**Pending Assets:**
-- [ ] Licensed brand fonts (replace the Inter placeholders in `brandFonts` and the `expo-font` plugin entry in `apps/mobile/app.json`)
-- [ ] Final brand color palette (replace the values in `packages/ui/src/theme/brand.ts`)
-- [ ] Logo and app icon
-
-**Status:** Listed in README under "Pending client assets"
-
-### Type Safety
-
-**Declaration:**
 ```typescript
 declare module '@tamagui/core' {
   interface TamaguiCustomConfig extends Conf {}
 }
 ```
 
-**Usage:** components read semantic colours with `useAppColors()` or `useThemedStyles()` from `@sisig/ui`, never raw hex values. A test in `apps/mobile/src/no-raw-colors.test.ts` and `packages/ui/src/no-raw-colors.test.ts` fails if a component file contains a hex literal.
+### Using colours in components
 
-### Contrast Testing
+Components do not use Tamagui styled components today. They build React Native styles from resolved semantic colours:
 
-**Decision:** Automated contrast checker runs in CI.
+```typescript
+import { StyleSheet } from 'react-native';
+import { Text, useThemedStyles, type AppColors } from '@sisig/ui';
 
-**Tool:** Custom WCAG 2.x contrast calculation (`packages/ui/src/theme/contrast.ts`)
-**Threshold:** WCAG AA 4.5:1 for every foreground/background pair in both themes (stricter than the 3:1 large-text rule)
+const createStyles = (c: AppColors) =>
+  StyleSheet.create({
+    title: { color: c.primary },
+  });
 
-**Where it runs:** `packages/ui/src/theme/contrast.test.ts` runs under `pnpm test`, which the CI "Unit tests" step executes on every PR.
+export function Title(): JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  return <Text style={styles.title}>Buy now</Text>;
+}
+```
 
-### Rebrand in 10 Minutes
+`useAppColors()` reads the active Tamagui theme and returns every semantic colour. `useThemedStyles(factory)` rebuilds the styles only when the theme changes. Keep the factory at module level.
 
-**How to Swap Brand:**
+### Dynamic Type Support
 
-1. Update the values in `packages/ui/src/theme/brand.ts` (palette, `lightTheme`, `darkTheme`).
-   Run `pnpm test`: the contrast test fails if any pair falls below AA.
+`Text` and `TextInput` from `@sisig/ui` set `maxFontSizeMultiplier` to `FONT_SCALE_CAP` (1.5) and clamp any larger value a caller passes. Text grows with the OS font size setting up to 1.5x, so layouts keep their shape. App code must use these wrappers, not the React Native components.
 
-2. Replace the Inter placeholder fonts: update `brandFonts` in the same file, the font files listed under the `expo-font` plugin in `apps/mobile/app.json`, and the imports in `apps/mobile/app/_layout.tsx`.
+### Light/Dark Theme Switching
 
+`apps/mobile/src/components/AppThemeProvider.tsx` reads `useColorScheme()`, sets the Tamagui theme, and sets the status bar style. It switches while the app runs. There is no in-app override in v1. `app.json` sets `userInterfaceStyle: "automatic"`.
+
+### Fonts
+
+The placeholder fonts are Inter 400 and 600 from `@expo-google-fonts/inter`. They are embedded at build time through the `expo-font` plugin in `apps/mobile/app.json` and loaded at runtime with `useFonts` in `app/_layout.tsx`. The font keys must match `brandFonts`.
+
+### Contrast and raw-colour tests
+
+- `packages/ui/src/theme/contrast.test.ts` checks that both themes define every semantic token, and that 26 foreground/background pairs reach WCAG AA 4.5:1 in both themes. Only the decorative `border` token is not covered. It runs under `pnpm test`, which CI runs on every pull request.
+- `packages/ui/src/no-raw-colors.test.ts` and `apps/mobile/src/no-raw-colors.test.ts` fail if a non-test `.ts` or `.tsx` file (other than `brand.ts`) contains a quoted hex colour such as `'#FFFFFF'`.
+
+### Rebrand
+
+1. Change the values in `packages/ui/src/theme/brand.ts` (`palette`, `lightTheme`, `darkTheme`). Run `pnpm test`: the contrast test fails if any pair falls below AA.
+2. Replace the Inter placeholders: update `brandFonts` in the same file, the font files listed under the `expo-font` plugin in `apps/mobile/app.json`, and the font imports in `apps/mobile/app/_layout.tsx`.
 3. Rebuild and check:
+
 ```bash
 pnpm -F @sisig/ui build
 pnpm test
 pnpm -F @sisig/mobile typecheck
 ```
 
-4. All screens use the new colours with no component changes.
+Screens pick up the new colours with no component changes.
+
+---
+
+## Claude Integration
+
+`@sisig/claude` wraps `@anthropic-ai/sdk` (`^0.24`) in a `ClaudeClient` class and adds translation, code-analysis and document-generation helpers. In the app:
+
+- `app/ai-chat.tsx`, `ai-journal.tsx`, `ai-summarizer.tsx` and `ai-translator.tsx` are UI only. They show fixed placeholder text and make no API call. `ai-chat` uses `ConversationManager` (local message history) and `ai-translator` uses `SUPPORTED_LANGUAGES`. No screen links to these routes.
+- `src/hooks/useAI.ts` and `src/hooks/useImageAnalysis.ts` exist, but no screen uses them. `useImageAnalysis` never calls the API.
+
+> **Warning:** `ClaudeClient` reads `ANTHROPIC_API_KEY` from `process.env` when no key is passed. Expo inlines only `EXPO_PUBLIC_*` variables, so that value is not in the app bundle, and `new ClaudeClient()` throws in the app. Do not work around this with an `EXPO_PUBLIC_` variable or by passing a key to `useAI`: anything in the bundle can be extracted from the installed app.
+
+The package and its limits are documented in [packages/claude/README.md](../packages/claude/README.md) and [CLAUDE_SKILLS.md](../CLAUDE_SKILLS.md).
 
 ---
 
 ## Integration Points
 
-### Database → Frontend Type Flow
+### Database to frontend types
 
-```
-PostgreSQL Schema
-       ↓
-  pnpm db:types
-       ↓
-packages/api/src/database.types.ts
-       ↓
-import type { Database } from '@sisig/api'
-       ↓
-  Fully typed queries
-```
+1. Migrations define the schema.
+2. `pnpm db:types` generates `packages/api/src/database.types.ts` from the local Supabase stack.
+3. Code imports the types with `import type { Database } from '@sisig/api'`, and the hooks use `SupabaseClient<Database>`.
+4. The CI `types-drift` job regenerates the file and fails if it differs from the committed one.
 
-### Mobile App → API Data Flow
+### Auth to database
 
-```
-React Native Component
-       ↓
-  useAI / useImageAnalysis hooks
-       ↓
-  @sisig/claude package
-       ↓
-  Anthropic API / Supabase PostgREST
-       ↓
-  PostgreSQL
-```
+The local stack config (`supabase/config.toml`) enables a custom access token hook, `private.custom_access_token_hook`, which adds an `app_role` claim to access tokens. See [SUPABASE.md](SUPABASE.md).
 
-### Theme Configuration → All Components
+### Edge Functions
 
-```
-packages/ui/src/theme/brand.ts (single source of truth)
-       ↓
-  All @sisig/ui components
-       ↓
-  All app screens
-       ↓
-  Consistent theme across app
-```
+`supabase/functions/whoami` answers `GET` with the caller's id, email and app role, after it verifies the caller's token against `/auth/v1/user`. Shared helpers for auth, CORS and error envelopes are in `supabase/functions/_shared`. The mobile app does not call any Edge Function yet. When it does, `normalizeError` already maps Functions errors.
+
+### Theme to components
+
+See the diagram in [THEME-01: Design System](#theme-01-design-system).
 
 ---
 
@@ -695,101 +568,71 @@ packages/ui/src/theme/brand.ts (single source of truth)
 
 ### Getting Started
 
+The step-by-step setup, including the Android emulator, is in [LOCAL-DEVELOPMENT.md](LOCAL-DEVELOPMENT.md). In short:
+
 ```bash
-# Clone and install
-git clone https://github.com/Alexd2004/Sisig.git
-cd Sisig
 pnpm install
 
-# Start database
-pnpm db:start      # Local Supabase (Docker)
-pnpm db:reset      # Migrations + seed
+# Create apps/mobile/.env.local (gitignored) with
+# EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY
 
-# Start app
-pnpm dev           # Expo dev server
+# Build the shared packages that Metro reads from dist/
+pnpm turbo run build --filter='@sisig/mobile^...'
 
-# In another terminal: Generate types
-pnpm db:types
+# First run: build and install the dev client, then start Metro
+pnpm -F @sisig/mobile exec expo run:android
+
+# Later runs: start Metro for the installed dev client
+pnpm -F @sisig/mobile dev
 ```
+
+The team runs the app on an Android emulator against the hosted Supabase dev project. iOS is not set up yet, because it needs a full Xcode install. A local Supabase stack (`pnpm db:start`, Docker required) is only needed for database work. See [SUPABASE.md](SUPABASE.md).
 
 ### Creating a New Feature
 
-1. **Define database schema** (if needed)
-   ```bash
-   pnpm db:new add_feature_tables
-   # Edit supabase/migrations/TIMESTAMP_add_feature_tables.sql
-   pnpm db:reset
-   pnpm db:types
-   ```
-
-2. **Build the mobile screen**
-   ```bash
-   touch apps/mobile/app/(tabs)/new-feature.tsx
-   # Add screen to (tabs)/_layout.tsx
-   ```
-
-3. **Add RLS policies** (if exposing data)
-   ```sql
-   create policy "Users can view their feature data"
-     on public.feature_table
-     for select
-     using (auth.uid() = user_id);
-   ```
-
-4. **Test**
-   ```bash
-   pnpm lint
-   pnpm typecheck
-   pnpm test
-   pnpm db:test
-   ```
-
-5. **Commit**
-   ```bash
-   git add -A
-   git commit -m "feat: add new feature"
-   git push
-   ```
+1. **Schema (if needed).** Run `pnpm db:new <name>`, write the migration with RLS policies, then `pnpm db:reset` and `pnpm db:types`. Follow [supabase/CONVENTIONS.md](../supabase/CONVENTIONS.md). Points, redemptions and orders change only through RPCs or Edge Functions.
+2. **Data access.** Add keys to the `keys` factory. Add a `xxxQueryOptions(client)` function and a thin `useXxx` hook in `packages/api`, and throw `normalizeError(error)`. Rebuild the package.
+3. **Screen.** A new tab is a folder `app/(tabs)/<name>/` with a `_layout.tsx` (a Stack using `useStackScreenOptions`) and an `index.tsx`, plus a `Tabs.Screen` in `app/(tabs)/_layout.tsx`. Add its path to `TAB_PATHS` in `src/navigation/auth-gate.ts` if it should be a `returnTo` target. Wrap the stack in `SignInRequired` if guests must not see it.
+4. **Tests.** Put them under `src/`, never under `app/`.
+5. **Checks.** Run `pnpm lint`, `pnpm typecheck`, `pnpm test` and, for schema changes, `pnpm db:test`.
+6. **Branch and pull request.** Follow [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ### Testing Strategy
 
 | Layer | Tool | Command |
 |-------|------|---------|
 | Database | pgTAP | `pnpm db:test` |
-| Mobile App | Jest + React Native Testing Library | `pnpm test` |
-| API Types | TypeScript | `pnpm typecheck` |
+| Edge Functions | Deno test | `deno test --allow-all --no-config supabase/functions` |
+| `@sisig/api`, `@sisig/claude` | Jest with ts-jest | `pnpm -F @sisig/api test`, `pnpm -F @sisig/claude test` |
+| `@sisig/ui`, `@sisig/mobile` | Jest with jest-expo and React Native Testing Library | `pnpm -F @sisig/ui test`, `pnpm -F @sisig/mobile test` |
+| Types | TypeScript | `pnpm typecheck` |
 | Linting | ESLint | `pnpm lint` |
-| Formatting | Prettier | `pnpm format` |
+| Formatting | Prettier | `pnpm format:check` |
+| App bundle | `expo export` | see the CI step in [DEVOPS-02-CI.md](DEVOPS-02-CI.md) |
+
+`pnpm test` runs every workspace's tests through Turborepo. The mobile and UI tests import `@sisig/*` from `dist/`, so build the packages first when you run a workspace's tests directly.
 
 ---
 
 ## Deployment Strategy
 
-### Mobile App Deployment
+### Mobile App
 
-1. **Local Dev Client**
-   ```bash
-   pnpm -F @sisig/mobile exec expo run:ios        # needs Xcode
-   pnpm -F @sisig/mobile exec expo run:android    # needs Android Studio
-   ```
+1. **Local dev client.** `pnpm -F @sisig/mobile exec expo run:android` builds a debug app with a native project, installs it on the emulator or device, and starts Metro. `expo run:ios` does the same on iOS but needs Xcode, and has not been set up. Both commands generate `apps/mobile/android` and `apps/mobile/ios`. Those folders are local build output and are not committed.
+2. **Release builds.** Not configured. The local Expo CLI rejects `expo build`, and there is no `eas.json`. App Store and Play Store builds through EAS (Expo Application Services) are planned (DEVOPS-04).
 
-2. **Production Builds** (not configured yet)
-   - The local Expo CLI rejects `expo build`, and there is no `eas.json`. Release builds need EAS (`eas build`).
-   - Planned for DEVOPS-04: App Store and Play Store builds via EAS.
+### Database
 
-### Database Deployment
-
-1. **Migrations auto-run on `db:reset`**
-2. **Production: Manual review and approval** (via GitHub PR)
-3. **Supabase hosts PostgreSQL** (no server to manage)
+Migrations apply when the local stack starts or resets (`pnpm db:start`, `pnpm db:reset`). The CI `database` job runs pgTAP tests and `pnpm db:lint` on every pull request. How changes reach the hosted project is described in [SUPABASE.md](SUPABASE.md).
 
 ### Environment Management
 
-| Env | Database | API | Notes |
-|-----|----------|-----|-------|
-| Local | `supabase start` | Localhost | For development |
-| Staging | Supabase Cloud | Cloud API | For testing |
-| Production | Supabase Cloud | Cloud API | Live users |
+| Environment | Database | Used for |
+|-------------|----------|----------|
+| Local | `supabase start` (Docker) | Database work, pgTAP tests, type generation |
+| Hosted dev project | Supabase cloud | Running the app on the Android emulator |
+
+No staging or production environment is defined in this repository.
 
 ---
 
@@ -797,48 +640,45 @@ pnpm db:types
 
 | Decision | Rationale | Trade-off |
 |----------|-----------|-----------|
-| RLS for all public tables | Security at DB level | Policies are complex to write |
-| Price in cents | No floating-point errors | Must convert to/from dollars in UI |
-| Semantic tokens | Brand swaps without code changes | Extra layer of abstraction |
-| Expo Router file-based | Deep linking automatic, easy refactor | File system as API |
-| Bottom 5-tab nav | Quick access, mobile standard | Limited space for buttons |
-| pgTAP tests | SQL tests are simple, database-focused | Different from app tests |
-| Job logging to private.job_runs | Single history source | Adds table and triggers |
+| RLS on every public table | Access control lives in the database | A missing policy means no access |
+| Money in integer cents | No floating-point errors | Convert to dollars in the UI |
+| Points change only through RPCs | One audited path for balance changes | Redeem waits on the LOY-03 RPC |
+| Shared packages consumed from `dist/` | Metro, Jest and `tsc` read one built entry point | Build packages before starting Metro |
+| Encrypted session, key in SecureStore | Tokens never sit in AsyncStorage as plaintext | More moving parts on sign-out |
+| Purge on every `SIGNED_OUT` | A session that ends elsewhere also clears the device | Needs the in-flight guard to avoid a double purge |
+| Persist only allowlisted query keys | No personal data in the unencrypted cache | New keys need a deliberate allowlist decision |
+| Semantic tokens | Brand swaps without component changes | An extra layer of indirection |
+| Expo Router file-based routes | Routes and deep links follow the file tree | Every file in `app/` becomes a route, tests included |
+| Five-tab navigation with per-tab stacks | Fast access; each tab keeps its own history | Limited room for more top-level sections |
+| Development build, not Expo Go | Native config and plugins are applied at build time | Each native change needs a new dev client build |
 
 ---
 
 ## Next Steps
 
-### Immediate (Next Sprint)
+Planned work named in the code and docs:
 
-- [ ] **AUTH-01:** Supabase Auth setup (OAuth + email/password)
-- [ ] **DEVOPS-02:** CI/CD pipeline (GitHub Actions, type drift checks)
-- [ ] **Finish PLAT-02:** Modal routes, item detail screen, redeem flow
-
-### Medium Term (2-3 Sprints)
-
-- [ ] **PLAT-03:** Session state management (Redux/Zustand)
-- [ ] **Order flow:** Cart, checkout, payment (Stripe)
-- [ ] **Admin panel:** Framework choice (THEME-01 applied to web)
-
-### Design Phase Complete
-
-- [ ] Client brand assets arrive
-- [ ] Swap `packages/ui/src/theme/brand.ts` colors and fonts
-- [ ] Rebuild and deploy (no component changes)
+- **AUTH-01 to AUTH-03:** the real welcome, login, sign-up, email verification and password reset screens.
+- **AUTH-05:** member deletion and anonymisation (the ledger already allows it).
+- **LOY-01, LOY-03, LOY-04:** RPCs that post points and handle redemptions. `useRedeemPoints` waits on LOY-03.
+- **LOY-06:** client sign-off on loyalty rules; `loyalty_settings` values are placeholders until then.
+- **ADM-01:** admin app framework.
+- **DEVOPS-04:** release builds through EAS.
+- Client brand assets: swap the values in `packages/ui/src/theme/brand.ts`, then rebuild.
 
 ---
 
-## Contact & Questions
+## Related Documents
 
-For architecture questions or design decisions, refer to:
-- `supabase/README.md` — Database conventions
-- `apps/mobile/README.md` — Mobile app setup
-- `CONTRIBUTING.md` — Git workflow
-- `CLAUDE_SKILLS.md` — AI integrations
+- [SUPABASE.md](SUPABASE.md): the Supabase guide (schema, migrations, RLS, Edge Functions).
+- [LOCAL-DEVELOPMENT.md](LOCAL-DEVELOPMENT.md): local setup and the Android emulator.
+- [DEVOPS-02-CI.md](DEVOPS-02-CI.md): the CI pipeline.
+- [supabase/README.md](../supabase/README.md) and [supabase/CONVENTIONS.md](../supabase/CONVENTIONS.md): database commands and conventions.
+- [apps/mobile/README.md](../apps/mobile/README.md): the mobile app.
+- [CONTRIBUTING.md](../CONTRIBUTING.md): branching, commits and pull requests.
+- [CLAUDE_SKILLS.md](../CLAUDE_SKILLS.md) and [packages/claude/README.md](../packages/claude/README.md): the Claude package.
 
 ---
 
-**Document maintained by:** Dev Team  
-**Last updated:** October 28, 2024  
-**Next review:** November 30, 2024
+**Document maintained by:** Dev Team
+**Last updated:** November 2026
