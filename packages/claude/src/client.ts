@@ -35,7 +35,7 @@ export class ClaudeClient {
 
   async chat(
     messages: Array<{ role: 'user' | 'assistant'; content: string }>,
-    options: CreateMessageOptions = {},
+    options: CreateMessageOptions = {}
   ): Promise<MessageResponse> {
     const {
       model = 'claude-3-5-sonnet-20241022',
@@ -59,14 +59,8 @@ export class ClaudeClient {
     };
   }
 
-  async generateText(
-    prompt: string,
-    options: CreateMessageOptions = {},
-  ): Promise<string> {
-    const response = await this.chat(
-      [{ role: 'user', content: prompt }],
-      options,
-    );
+  async generateText(prompt: string, options: CreateMessageOptions = {}): Promise<string> {
+    const response = await this.chat([{ role: 'user', content: prompt }], options);
 
     const textContent = response.content.find((block) => block.type === 'text');
     if (!textContent || !textContent.text) {
@@ -79,7 +73,7 @@ export class ClaudeClient {
   async streamChat(
     messages: Array<{ role: 'user' | 'assistant'; content: string }>,
     onChunk: (chunk: string) => void,
-    options: CreateMessageOptions = {},
+    options: CreateMessageOptions = {}
   ): Promise<void> {
     const {
       model = 'claude-3-5-sonnet-20241022',
@@ -97,10 +91,7 @@ export class ClaudeClient {
     });
 
     for await (const chunk of stream) {
-      if (
-        chunk.type === 'content_block_delta' &&
-        chunk.delta.type === 'text_delta'
-      ) {
+      if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
         onChunk(chunk.delta.text);
       }
     }

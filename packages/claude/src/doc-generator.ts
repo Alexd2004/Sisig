@@ -8,13 +8,9 @@ export interface DocGenerationOptions {
 
 export async function generateAPIDocs(
   code: string,
-  options: DocGenerationOptions = {},
+  options: DocGenerationOptions = {}
 ): Promise<string> {
-  const {
-    style = 'markdown',
-    includeExamples = true,
-    includeTypeInfo = true,
-  } = options;
+  const { style = 'markdown', includeExamples = true, includeTypeInfo = true } = options;
 
   const client = new ClaudeClient();
 
@@ -38,7 +34,7 @@ ${code}
 export async function generateREADME(
   projectDescription: string,
   features: string[],
-  setup: string,
+  setup: string
 ): Promise<string> {
   const client = new ClaudeClient();
 
@@ -67,7 +63,7 @@ Setup: ${setup}`;
 
 export async function generateTestCases(
   code: string,
-  framework: 'jest' | 'mocha' | 'pytest' = 'jest',
+  framework: 'jest' | 'mocha' | 'pytest' = 'jest'
 ): Promise<string> {
   const client = new ClaudeClient();
 
@@ -95,7 +91,7 @@ ${code}
 export async function generateChangelog(
   currentVersion: string,
   previousVersion: string,
-  changes: string[],
+  changes: string[]
 ): Promise<string> {
   const client = new ClaudeClient();
 
@@ -120,7 +116,7 @@ Changes: ${changes.join(', ')}`;
 
 export async function generateContributingGuide(
   projectName: string,
-  techStack: string[],
+  techStack: string[]
 ): Promise<string> {
   const client = new ClaudeClient();
 

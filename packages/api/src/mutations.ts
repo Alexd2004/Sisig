@@ -1,8 +1,4 @@
-import {
-  useMutation,
-  UseMutationOptions,
-  QueryClient,
-} from '@tanstack/react-query';
+import { useMutation, UseMutationOptions, QueryClient } from '@tanstack/react-query';
 import { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from './database.types';
 import { keys } from './query-keys';
@@ -20,7 +16,7 @@ export function useCreateOrder(
   options?: Omit<
     UseMutationOptions<{ orderId: string }, Error, { order: Order; items: OrderItem[] }>,
     'mutationFn'
-  >,
+  >
 ) {
   return useMutation({
     mutationFn: async (payload: {
@@ -46,9 +42,7 @@ export function useCreateOrder(
         order_id: orderId,
       }));
 
-      const { error: itemsError } = await client
-        .from('order_items')
-        .insert(itemsWithOrderId);
+      const { error: itemsError } = await client.from('order_items').insert(itemsWithOrderId);
 
       if (itemsError) {
         throw normalizeError(itemsError);
@@ -77,13 +71,10 @@ export function useRedeemPoints(
   options?: Omit<
     UseMutationOptions<void, Error, { rewardId: string; points: number }>,
     'mutationFn'
-  >,
+  >
 ) {
   return useMutation({
-    mutationFn: async (_payload: {
-      rewardId: string;
-      points: number;
-    }): Promise<void> => {
+    mutationFn: async (_payload: { rewardId: string; points: number }): Promise<void> => {
       // TODO(LOY): no redeem_loyalty_reward RPC exists in supabase/migrations yet.
       // Points must only change through an RPC, so fail loudly until it lands.
       throw new Error('redeem_loyalty_reward RPC is not implemented yet');
@@ -112,15 +103,13 @@ export interface OptimisticUpdateConfig<T> {
 export function optimisticUpdate<T>(
   queryClient: QueryClient,
   config: OptimisticUpdateConfig<T>,
-  mutationFn: () => Promise<void>,
+  mutationFn: () => Promise<void>
 ): Promise<void> {
   // Save old data
   const oldData = queryClient.getQueryData<T>(config.queryKey);
 
   // Update UI optimistically
-  queryClient.setQueryData(config.queryKey, (old: T) =>
-    config.updateFn(old),
-  );
+  queryClient.setQueryData(config.queryKey, (old: T) => config.updateFn(old));
 
   // Execute mutation
   return mutationFn().catch((error) => {

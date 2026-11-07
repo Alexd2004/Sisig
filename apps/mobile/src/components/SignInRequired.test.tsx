@@ -23,7 +23,11 @@ function renderGate(status: 'signed-in' | 'signed-out'): void {
     <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
       <Theme name="light">
         <SessionProvider source={sourceWithStatus(status)}>
-          <SignInRequired title="My Points" prompt="Sign in to see your points." returnTo="/rewards">
+          <SignInRequired
+            title="My Points"
+            prompt="Sign in to see your points."
+            returnTo="/rewards"
+          >
             <Text>points balance</Text>
           </SignInRequired>
         </SessionProvider>

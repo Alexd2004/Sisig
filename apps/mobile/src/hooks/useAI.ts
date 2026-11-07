@@ -11,9 +11,7 @@ interface UseAIResult {
   loading: boolean;
   error: string | null;
   generate: (prompt: string) => Promise<void>;
-  chat: (
-    messages: Array<{ role: 'user' | 'assistant'; content: string }>,
-  ) => Promise<void>;
+  chat: (messages: Array<{ role: 'user' | 'assistant'; content: string }>) => Promise<void>;
   reset: () => void;
 }
 
@@ -34,20 +32,17 @@ export function useAI(options: UseAIOptions = {}): UseAIResult {
         });
         setResponse(result);
       } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : 'Unknown error';
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
         setError(errorMessage);
       } finally {
         setLoading(false);
       }
     },
-    [client, options.systemPrompt],
+    [client, options.systemPrompt]
   );
 
   const chat = useCallback(
-    async (
-      messages: Array<{ role: 'user' | 'assistant'; content: string }>,
-    ): Promise<void> => {
+    async (messages: Array<{ role: 'user' | 'assistant'; content: string }>): Promise<void> => {
       setLoading(true);
       setError(null);
       try {
@@ -59,14 +54,13 @@ export function useAI(options: UseAIOptions = {}): UseAIResult {
           setResponse(textContent.text);
         }
       } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : 'Unknown error';
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
         setError(errorMessage);
       } finally {
         setLoading(false);
       }
     },
-    [client, options.systemPrompt],
+    [client, options.systemPrompt]
   );
 
   const reset = useCallback((): void => {

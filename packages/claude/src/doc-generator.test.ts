@@ -40,7 +40,7 @@ export function add(a: number, b: number): number {
         const readme = await generateREADME(
           'A simple calculator library',
           ['Add numbers', 'Subtract numbers'],
-          'npm install calculator',
+          'npm install calculator'
         );
         expect(typeof readme).toBe('string');
         expect(readme.length).toBeGreaterThan(0);
@@ -65,11 +65,10 @@ export function add(a: number, b: number): number {
   describe('generateChangelog', () => {
     it('should generate changelog entry', async () => {
       try {
-        const changelog = await generateChangelog(
-          '1.1.0',
-          '1.0.0',
-          ['Added new feature', 'Fixed bug'],
-        );
+        const changelog = await generateChangelog('1.1.0', '1.0.0', [
+          'Added new feature',
+          'Fixed bug',
+        ]);
         expect(typeof changelog).toBe('string');
         expect(changelog.length).toBeGreaterThan(0);
       } catch (error) {
@@ -81,10 +80,7 @@ export function add(a: number, b: number): number {
   describe('generateContributingGuide', () => {
     it('should generate CONTRIBUTING guide', async () => {
       try {
-        const guide = await generateContributingGuide('MyProject', [
-          'TypeScript',
-          'React',
-        ]);
+        const guide = await generateContributingGuide('MyProject', ['TypeScript', 'React']);
         expect(typeof guide).toBe('string');
         expect(guide.length).toBeGreaterThan(0);
       } catch (error) {

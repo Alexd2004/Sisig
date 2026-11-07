@@ -1,4 +1,9 @@
-import { analyzeCode, generateCodeDocumentation, suggestRefactoring, explainCode } from './code-analyzer';
+import {
+  analyzeCode,
+  generateCodeDocumentation,
+  suggestRefactoring,
+  explainCode,
+} from './code-analyzer';
 
 // Note: These are placeholder tests. Real tests would mock the ClaudeClient
 // or use integration tests with actual API calls

@@ -18,7 +18,8 @@ import { keys } from './query-keys';
 let activeQueryClient: QueryClient;
 
 jest.mock('@tanstack/react-query', () => {
-  const actual = jest.requireActual<typeof import('@tanstack/react-query')>('@tanstack/react-query');
+  const actual =
+    jest.requireActual<typeof import('@tanstack/react-query')>('@tanstack/react-query');
   return {
     ...actual,
     useMutation: (options: UseMutationOptions<unknown, Error, unknown, unknown>) => {

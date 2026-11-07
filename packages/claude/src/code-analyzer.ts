@@ -8,7 +8,7 @@ export interface CodeAnalysis {
 
 export async function analyzeCode(
   code: string,
-  language: string = 'typescript',
+  language: string = 'typescript'
 ): Promise<CodeAnalysis> {
   const client = new ClaudeClient();
 
@@ -45,14 +45,14 @@ ${code}
     return JSON.parse(jsonMatch[0]) as CodeAnalysis;
   } catch (error) {
     throw new Error(
-      `Code analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      `Code analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`
     );
   }
 }
 
 export async function generateCodeDocumentation(
   code: string,
-  language: string = 'typescript',
+  language: string = 'typescript'
 ): Promise<string> {
   const client = new ClaudeClient();
 
@@ -77,7 +77,7 @@ ${code}
 
 export async function suggestRefactoring(
   code: string,
-  language: string = 'typescript',
+  language: string = 'typescript'
 ): Promise<string> {
   const client = new ClaudeClient();
 
@@ -96,10 +96,7 @@ ${code}
   });
 }
 
-export async function explainCode(
-  code: string,
-  language: string = 'typescript',
-): Promise<string> {
+export async function explainCode(code: string, language: string = 'typescript'): Promise<string> {
   const client = new ClaudeClient();
 
   const systemPrompt =

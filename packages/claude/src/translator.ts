@@ -22,7 +22,7 @@ export interface TranslationResult {
 export async function translateText(
   text: string,
   sourceLanguage: Language = 'English',
-  targetLanguage: Language = 'Spanish',
+  targetLanguage: Language = 'Spanish'
 ): Promise<TranslationResult> {
   const client = new ClaudeClient();
 
@@ -61,12 +61,10 @@ Do not include any explanation.`;
 export async function translateToMultipleLanguages(
   text: string,
   sourceLanguage: Language,
-  targetLanguages: Language[],
+  targetLanguages: Language[]
 ): Promise<TranslationResult[]> {
   return Promise.all(
-    targetLanguages.map((targetLang) =>
-      translateText(text, sourceLanguage, targetLang),
-    ),
+    targetLanguages.map((targetLang) => translateText(text, sourceLanguage, targetLang))
   );
 }
 

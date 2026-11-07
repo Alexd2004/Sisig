@@ -40,12 +40,9 @@ export function useImageAnalysis(): UseImageAnalysisResult {
           //   }]
           // }]);
 
-          setDescription(
-            'Image analysis feature requires Claude vision model setup.',
-          );
+          setDescription('Image analysis feature requires Claude vision model setup.');
         } catch (err) {
-          const errorMessage =
-            err instanceof Error ? err.message : 'Unknown error';
+          const errorMessage = err instanceof Error ? err.message : 'Unknown error';
           setError(errorMessage);
         } finally {
           setLoading(false);
