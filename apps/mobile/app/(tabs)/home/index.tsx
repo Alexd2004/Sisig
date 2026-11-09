@@ -1,5 +1,7 @@
 import { View, ScrollView, StyleSheet } from 'react-native';
 import { Text, useThemedStyles, type AppColors } from '@sisig/ui';
+import { AnnouncementBanner } from '../../../src/components/AnnouncementBanner';
+import { UpdateBanner } from '../../../src/components/UpdateBanner';
 
 const createStyles = (c: AppColors) =>
   StyleSheet.create({
@@ -49,6 +51,8 @@ export default function HomeScreen(): JSX.Element {
 
   return (
     <ScrollView style={styles.container}>
+      <UpdateBanner />
+      <AnnouncementBanner />
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Welcome to Sisig Eh!</Text>
         <Text style={styles.description}>Browse our menu, order food, and earn loyalty points</Text>

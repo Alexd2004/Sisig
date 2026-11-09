@@ -1,161 +1,133 @@
 # Sisig Platform
 
-> Mobile-first platform with React Native (Expo), monorepo architecture, and TypeScript strict mode.
+> Monorepo for the Sisig Eh! rewards app: a React Native (Expo SDK 51) mobile app, shared TypeScript packages, and a Supabase backend. pnpm workspaces, Turborepo, TypeScript strict mode.
 
-## Quick Start (< 30 minutes)
+## Quick Start
 
-### Prerequisites
+You need a Mac with Node.js 18 or later, pnpm 9, JDK 17, the Android SDK and an Android emulator, plus an `apps/mobile/.env.local` file with the hosted Supabase URL and publishable key. [docs/LOCAL-DEVELOPMENT.md](docs/LOCAL-DEVELOPMENT.md) walks through all of it, step by step.
 
-- Node.js 18+ and npm
-- `pnpm` package manager: `npm install -g pnpm@9`
-- Xcode (macOS) or Android Studio (for device builds)
-- Expo account (optional, but recommended for cloud builds)
-
-### Setup
+With those in place, the first run is:
 
 ```bash
-# 1. Clone the repo
 git clone https://github.com/Alexd2004/Sisig.git
 cd Sisig
-
-# 2. Install dependencies (all workspaces)
 pnpm install
-
-# 3. Start development server
-pnpm dev
-
-# 4. Install the development client on a simulator or device (see "Development Client")
-# 5. Open the development client and connect it to the server started by pnpm dev
 ```
 
-Expo Go cannot run this app, so do not use it.
+```bash
+pnpm turbo run build --filter='@sisig/mobile^...'
+```
 
-## Project Structure
+```bash
+pnpm -F @sisig/mobile exec expo run:android
+```
+
+The first block clones the repo and installs dependencies. The second builds the workspace packages, which the app imports from their `dist/` folders. The third builds the development client, installs it on the running emulator, and starts Metro. After that, the daily command is:
+
+```bash
+pnpm -F @sisig/mobile exec expo start --dev-client --android
+```
+
+Expo Go cannot run this app. iOS is not set up yet (it needs the full Xcode app).
+
+## Documentation
+
+[docs/README.md](docs/README.md) lists every doc, what it covers and who it is for, and explains the PDF versions in `docs/pdf/`. The ones most people need:
+
+- [docs/LOCAL-DEVELOPMENT.md](docs/LOCAL-DEVELOPMENT.md): set up a Mac and run the app.
+- [CONTRIBUTING.md](CONTRIBUTING.md): branches, commits, pull requests, database changes.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the system fits together.
+- [docs/SUPABASE.md](docs/SUPABASE.md): the hosted Supabase project and applying migrations.
+- [docs/DEVOPS-02-CI.md](docs/DEVOPS-02-CI.md): the CI checks.
+
+## Repo Map
+
+```mermaid
+flowchart LR
+  MOBILE["apps/mobile<br/>Expo app (@sisig/mobile)"]
+  ADMIN["apps/admin<br/>placeholder (ADM-01)"]
+  API["packages/api<br/>Supabase client, queries, types"]
+  UI["packages/ui<br/>Tamagui theme, components"]
+  CLAUDE["packages/claude<br/>Claude API helpers"]
+  CONFIG["packages/config<br/>ESLint, Prettier, tsconfig"]
+  SB["supabase/<br/>migrations, tests, Edge Functions"]
+  MOBILE --> API
+  MOBILE --> UI
+  MOBILE --> CLAUDE
+  SB -->|"pnpm db:types"| API
+```
+
+Arrows from the app are runtime imports; the app loads each package from its built `dist/` folder. `pnpm db:types` generates `packages/api/src/database.types.ts` from a local database built from the migrations. `packages/config` holds the lint, format and TypeScript config every workspace extends.
 
 ```
 Sisig/
 ├── apps/
-│   ├── mobile/          # React Native Expo app
-│   │   ├── app/         # Expo Router pages and layout
-│   │   ├── src/         # Components and utilities
-│   │   └── package.json
-│   └── admin/           # Admin panel (framework TBD in ADM-01)
+│   ├── mobile/          # Expo app: app/ (Expo Router routes), src/ (components, lib, session, navigation)
+│   └── admin/           # Placeholder scripts only; framework chosen in ADM-01
 ├── packages/
-│   ├── ui/              # Shared UI components
-│   ├── api/             # API utilities and types
-│   └── config/          # Shared ESLint, Prettier, TypeScript config
-├── supabase/            # Supabase configuration (DATA-01)
-├── package.json         # Monorepo root and pnpm workspaces
-├── turbo.json           # Turborepo task cache config
-└── CONTRIBUTING.md      # Branching, release, and commit guidelines
+│   ├── api/             # @sisig/api: Supabase client, query keys and hooks, generated database types
+│   ├── ui/              # @sisig/ui: Tamagui theme, brand tokens, Button, Text, TextInput
+│   ├── claude/          # @sisig/claude: Claude API client and helpers
+│   └── config/          # @sisig/config: shared ESLint, Prettier and TypeScript config
+├── supabase/            # config.toml, migrations/, tests/database/ (pgTAP), functions/ (Edge Functions), seed.sql
+├── docs/                # Developer guides (index: docs/README.md)
+├── .github/             # CI workflows, CODEOWNERS, PR template
+├── package.json         # Root scripts and pnpm workspaces
+├── turbo.json           # Turborepo task pipeline and cache outputs
+└── CONTRIBUTING.md      # Branching, commits, pull requests, releases
 ```
 
-## Monorepo Setup
+## Key Commands
 
-### pnpm Workspaces + Turborepo
+Run these from the repo root.
 
-All packages are linked via `pnpm` workspaces. Build caching and task orchestration via Turborepo.
+| Command | What it does |
+|---|---|
+| `pnpm install` | Install dependencies for every workspace |
+| `pnpm turbo run build --filter='@sisig/mobile^...'` | Build the packages the mobile app depends on (into `dist/`) |
+| `pnpm -F @sisig/mobile exec expo run:android` | Build and install the Android dev client, then start Metro |
+| `pnpm -F @sisig/mobile exec expo start --dev-client --android` | Start Metro and open the installed dev client |
+| `pnpm lint` | ESLint in every workspace that has the script (`apps/admin` is a placeholder) |
+| `pnpm typecheck` | `tsc --noEmit` in every workspace that has the script (`apps/admin` is a placeholder); runs after the package builds it depends on |
+| `pnpm test` | Jest in every workspace that has the script (`apps/admin` is a placeholder) |
+| `pnpm format` | Prettier, writing changes |
+| `pnpm format:check` | Prettier check without changes (fails today; see [Known Issues](#known-issues)) |
+| `pnpm -F @sisig/mobile run doctor` | Run `expo-doctor` on the mobile app |
+| `pnpm db:start`, `pnpm db:reset`, `pnpm db:test`, `pnpm db:lint`, `pnpm db:types`, `pnpm db:new <name>` | Local Supabase commands (need Docker); see [supabase/README.md](supabase/README.md) |
+| `pnpm docs:pdf` | Regenerate the PDFs in `docs/pdf/`; see [docs/README.md](docs/README.md) |
 
-**Key commands:**
+Notes:
 
-```bash
-pnpm install            # Install all dependencies
-pnpm dev                # Run dev task in all workspaces (parallel)
-pnpm build              # Not configured yet: the mobile build step fails (see "Release Builds")
-pnpm lint               # Lint all packages (parallel)
-pnpm typecheck          # TypeScript strict mode (zero errors)
-pnpm test               # Jest tests across workspaces
-pnpm format             # Prettier auto-format
-pnpm format:check       # Check formatting without changes
-```
-
-### Metro Monorepo Resolution
-
-Expo uses Metro bundler with built-in monorepo support. Verify setup:
-
-```bash
-pnpm -F @sisig/mobile run doctor   # Runs expo-doctor to check config
-```
-
-Plain `pnpm doctor` does not run expo-doctor. It runs pnpm's own checker, because `doctor` is a built-in pnpm command, so use `run doctor` as shown.
-
-## TypeScript Strict Mode
-
-All packages enforce:
-
-```json
-{
-  "compilerOptions": {
-    "strict": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noImplicitReturns": true
-  }
-}
-```
-
-Run `pnpm typecheck` to verify zero errors.
+- `pnpm build` is not usable yet. It also runs the mobile app's `build` script (`expo build`), which the local Expo CLI rejects. Release builds need EAS, which is not set up (DEVOPS-04).
+- Plain `pnpm doctor` runs pnpm's own checker, not `expo-doctor`, because `doctor` is a built-in pnpm command. Use `run doctor` as shown.
+- `pnpm test --watch` does not work at the root: Turborepo rejects it (`ERROR unexpected argument '--watch' found`). Pass it to Jest in one package: `pnpm -F @sisig/mobile test -- --watch`.
 
 ## Development Client
 
-### Why Not Expo Go?
+The app runs in its own development build, made with `expo-dev-client` (listed under `plugins` in `apps/mobile/app.json`). This is the team's chosen workflow; Expo Go is not supported. Some native packages are declared in `apps/mobile/package.json` (`@sentry/react-native`, `lottie-react-native`, `react-native-gesture-handler`, `expo-device`) but no code imports them yet.
 
-We use `expo-dev-client` because the app requires native modules:
+- Build and install it with `expo run:android`. Rebuild it only when native code changes: a dependency with native code, or `apps/mobile/app.json`.
+- `expo run:android` generates `apps/mobile/android/` and adds `android` and `ios` scripts to `apps/mobile/package.json`. These are not git-ignored yet. Do not commit them.
+- `pnpm -F @sisig/mobile exec expo run:ios` needs the full Xcode app and is not set up on the team's Mac.
 
-- **Camera**: React Native Camera
-- **Secure Storage**: `expo-secure-store` (uses device keychain)
-- **Error Tracking**: Sentry
-- **Animations**: Lottie
-- **POS/Payment SDK**: Future native module
+Details and troubleshooting: [docs/LOCAL-DEVELOPMENT.md](docs/LOCAL-DEVELOPMENT.md).
 
-Expo Go does not support custom native code, so development builds are required from day one.
+## TypeScript Strict Mode
 
-### Building the Development Client Locally
-
-Install the development client with the local Expo CLI. This needs Xcode for iOS or Android Studio for Android.
-
-```bash
-pnpm -F @sisig/mobile exec expo run:ios        # iOS simulator
-pnpm -F @sisig/mobile exec expo run:android    # Android device or emulator
-```
-
-Then run `pnpm dev` and connect the installed client to the server.
-
-### Release Builds (Not Configured)
-
-The local Expo CLI rejects `expo build`, and the repo has no `eas.json`. Release builds need EAS (`eas build`). EAS setup is deferred to DEVOPS-04.
-
-## Linting & Formatting
-
-All workspaces share ESLint and Prettier configs via `@sisig/config`.
-
-```bash
-pnpm lint               # ESLint all packages
-pnpm format             # Auto-format with Prettier
-pnpm format:check       # Check formatting (not run in CI yet; see docs/DEVOPS-02-CI.md)
-```
+Every TypeScript workspace extends `packages/config/tsconfig.json`, which sets `strict`, `noImplicitAny`, `strictNullChecks`, `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns` and related flags. `pnpm typecheck` must pass with zero errors. `apps/admin` has placeholder scripts only, so it has no TypeScript yet.
 
 ## Testing
 
-### Jest + React Native Testing Library
+Jest runs in each workspace, with React Native Testing Library for components. Examples:
 
-Sample tests are included in:
+- `packages/ui/src/Button.test.tsx`: component test
+- `packages/ui/src/theme/contrast.test.ts`: WCAG AA contrast for every semantic colour pair
+- `packages/api/src/hooks/useMenu.test.ts`: query options test
+- `apps/mobile/src/navigation/index-redirect.test.tsx`: screen test for `app/index.tsx`
 
-- `packages/ui/src/Button.test.tsx` — Component test
-- `packages/ui/src/theme/contrast.test.ts` — WCAG AA contrast test for every semantic colour pair
-- `packages/api/src/utils.test.ts` — Unit test
-- `apps/mobile/app/index.test.tsx` — Screen test
+Keep test files out of `apps/mobile/app/`. Expo Router turns every file in that folder into a route, so a test there is bundled as a screen and crashes the app at launch (fixed in PR #18).
 
-Run tests:
-
-```bash
-pnpm test               # All tests
-pnpm -F @sisig/mobile test -- --watch   # Watch mode (one package at a time)
-```
-
-`pnpm test --watch` does not work at the root: pnpm rejects `--watch`. Pass it to Jest through a single package, as shown.
+Database tests (pgTAP) live in `supabase/tests/database/` and run with `pnpm db:test`, which needs Docker. CI runs them on every PR.
 
 ## Theme and Brand Tokens (THEME-01)
 
@@ -163,7 +135,7 @@ pnpm -F @sisig/mobile test -- --watch   # Watch mode (one package at a time)
 - **Light and dark** follow the OS setting (`userInterfaceStyle: "automatic"` in `apps/mobile/app.json`). There is no in-app override in v1.
 - **Font scaling** is capped at `FONT_SCALE_CAP` (1.5x) in `Text` and `TextInput`.
 - **Contrast:** `packages/ui/src/theme/contrast.test.ts` checks WCAG AA (4.5:1) for every foreground/background pair in both themes. It runs under `pnpm test` in CI.
-- **Rebrand:** edit `brand.ts`, then run `pnpm test`. The contrast test catches any pair that falls below AA. See `docs/ARCHITECTURE.md` ("Rebrand in 10 Minutes").
+- **Rebrand:** edit `brand.ts`, then run `pnpm test`. The contrast test catches any pair that falls below AA. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) ("Rebrand in 10 Minutes").
 
 ### Pending client assets
 
@@ -174,148 +146,53 @@ The values below are placeholders until the client supplies final assets. Do not
 | Brand colour palette (light and dark) | Placeholder palette tuned to pass WCAG AA. It is not the brand palette. | `packages/ui/src/theme/brand.ts` (`palette`, `lightTheme`, `darkTheme`) |
 | Brand fonts (body and heading) | Inter from Google Fonts via `@expo-google-fonts/inter` (Regular 400 and SemiBold 600). Package metadata lists `MIT AND OFL-1.1`. Confirm the licence before any release. | `brandFonts` in `brand.ts`; the `expo-font` plugin entry in `apps/mobile/app.json`; the imports in `apps/mobile/app/_layout.tsx` |
 | Licensed font files and final brand fonts | Not yet received from the client | Client input. Replace the placeholder fonts when they arrive. |
-
-## Acceptance Criteria (PLAT-01)
-
-- ✅ `pnpm install && pnpm dev` starts Expo dev server from clean clone
-- ✅ New dev completes onboarding < 30 minutes
-- ✅ TypeScript strict enabled in all packages; `pnpm typecheck` passes with zero errors
-- ✅ `pnpm lint` runs across workspaces
-- ⬜ `pnpm format:check` runs across workspaces but currently fails (exit 1) in packages/api, packages/claude, packages/ui and apps/mobile. It is not run in CI.
-- ⬜ Development client builds and runs on iOS simulator and Android device. Not verified here: `expo run:ios` and `expo run:android` were not run, since they need Xcode and Android Studio.
-- ✅ Imports from `@sisig/ui` and `@sisig/api` work in mobile app
-- ✅ Jest + RNTL sample tests in mobile app and API packages
-- ⬜ `expo-doctor` reports no issues. `pnpm -F @sisig/mobile run doctor` fails 3 checks:
-  - `app.json`: `ios.supportsTabletMode` is not an allowed property, and the `icon`, `splash.image` and `android.adaptiveIcon.foregroundImage` files do not exist.
-  - `@types/react-native` is installed directly, but `react-native` ships its own types.
-  - Missing peer dependencies: `expo-linking` and `expo-application`.
-
-## Branching & Releases
-
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for:
-
-- Trunk-based development with short-lived feature branches
-- Conventional Commits and Jira key integration
-- Release and hotfix procedures
-- Branch protection rules on `main`
-
-## Team & Code Review
-
-**CODEOWNERS:**
-
-- `apps/mobile/**` + `packages/ui/**` → @Alexd2004
-- `apps/admin/**` + `.github/**` → @Alexd2004
-- `supabase/**` → @Alexd2004
-
-All PRs require ≥1 CODEOWNER approval and all required checks to pass.
-
-## Troubleshooting
-
-### `expo-doctor` reports errors
-
-Update Expo or check [Expo documentation](https://docs.expo.dev).
-
-```bash
-pnpm -F @sisig/mobile upgrade expo
-pnpm -F @sisig/mobile run doctor
-```
-
-### TypeScript errors after updating packages
-
-Clear cache and reinstall:
-
-```bash
-rm -rf node_modules
-pnpm install
-pnpm typecheck
-```
-
-### Metro bundler issues
-
-Restart dev server:
-
-```bash
-# Stop current dev server (Ctrl+C)
-# Restart with:
-pnpm dev
-```
+| App icon, adaptive icon, splash and favicon | Solid placeholder images (PR #17). Final artwork comes with DSGN-01. | `apps/mobile/assets/` |
 
 ## Continuous Integration (DEVOPS-02)
 
-Every PR to `main` runs the checks defined in `.github/workflows/`. Job details and the manual GitHub settings are in [docs/DEVOPS-02-CI.md](docs/DEVOPS-02-CI.md).
-
-### Running CI Checks Locally
-
-Run these before pushing. The database steps need Docker.
-
-```bash
-# lint-and-test
-pnpm install --frozen-lockfile
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm -F @sisig/mobile exec expo install --check
-
-# database (Docker required)
-pnpm db:start        # Start local Supabase; applies supabase/migrations
-pnpm db:reset        # Rebuild from scratch: all migrations, then the seed
-pnpm db:test         # pgTAP tests in supabase/tests/database
-pnpm db:lint         # Schema lint; exits non-zero on errors
-
-# types-drift: regenerate types, then fail if they changed
-pnpm db:types
-git diff --exit-code packages/api/src/database.types.ts
-
-# deno-tests
-deno test --allow-all --no-config supabase/functions
-deno fmt --check --no-config supabase/functions
-deno lint --no-config supabase/functions
-
-# secrets (install gitleaks first: brew install gitleaks)
-gitleaks detect
-git grep -n -I -F -e "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" -e "SUPABASE_SERVICE_ROLE_KEY" -- apps packages
-# No output means clean (git grep exits 1 when nothing matches)
-```
-
-### Required Checks on Every PR
+Every pull request into `main`, and every push to `main`, runs two workflows in `.github/workflows/`:
 
 | Check (job) | What it runs |
 |---|---|
-| `lint-and-test` | ESLint, `tsc --noEmit`, Jest, `expo install --check` |
-| `database` | Local Supabase start, pgTAP tests, `supabase db lint --schema public,private --fail-on error` |
-| `types-drift` | `pnpm db:types`; fails if `database.types.ts` changes |
-| `secrets` | gitleaks, service-role key grep over `apps/` and `packages/` |
+| `lint-and-test` | ESLint, `tsc --noEmit`, Jest, `expo install --check`, package build, Android `expo export` bundle |
+| `database` | Local Supabase start (migrations and seed), pgTAP tests, `supabase db lint` |
+| `types-drift` | `pnpm db:types`; fails if `packages/api/src/database.types.ts` changes |
+| `secrets` | gitleaks, plus greps for JWTs, service-role key references and Anthropic keys in `apps/` and `packages/` |
 | `deno-tests` | Edge Function tests, `deno fmt --check`, `deno lint` |
 
-Every check runs on every PR. They block a merge only after branch protection on `main` requires them. That is a manual GitHub setting, described in [docs/DEVOPS-02-CI.md](docs/DEVOPS-02-CI.md#required-status-checks-manual-github-setting).
+Branch protection on `main` is not configured yet, so GitHub does not block a merge when a check fails. The team rule is to merge only when all five pass. Job details, local commands and fixes for common failures are in [docs/DEVOPS-02-CI.md](docs/DEVOPS-02-CI.md).
 
-**Target duration:** median under 10 minutes. Recent runs took about 3 minutes wall clock.
+## Branching and Code Review
 
-### Debugging CI Failures
+See [CONTRIBUTING.md](CONTRIBUTING.md) for trunk-based development, branch names, Conventional Commits with the Jira key as scope, the PR process, database changes and releases.
 
-**Type drift failure:**
-```bash
-pnpm db:start        # The type generator reads the local database
-pnpm db:types
-git add packages/api/src/database.types.ts
-git commit -m "chore: regenerate types after schema change"
-```
+`.github/CODEOWNERS` routes review requests by area. Every area currently points at @Alexd2004, because the DEV-A, DEV-B and DEV-C team handles do not exist yet. Any developer may approve a PR.
 
-**Migration or RLS test failure:**
-Check the test output; fix the migration and re-push. Use `pnpm db:reset && pnpm db:test` to reproduce locally.
+## Known Issues
 
-**Lint failure:**
-Fix the ESLint findings that `pnpm lint` reports. `pnpm format` applies Prettier formatting only.
+Checked on 2026-11-06:
+
+- **`pnpm format:check` fails** in `packages/api`, `packages/claude`, `packages/ui` and `apps/mobile`. It is not run in CI. See [docs/DEVOPS-02-CI.md](docs/DEVOPS-02-CI.md#known-gaps).
+- **`expo-doctor` fails three checks** on a clean clone (`pnpm -F @sisig/mobile run doctor`):
+  - `app.json`: `ios.supportsTabletMode` is not an allowed property.
+  - `@types/react-native` is installed directly, but `react-native` ships its own types.
+  - Missing peer dependency `expo-application`, required by `sentry-expo`.
+
+  After `expo run:android`, it also warns about the generated native folders. That warning is local only.
+- **Prebuild output is not git-ignored.** `apps/mobile/android/`, `apps/mobile/ios/` and the scripts prebuild adds to `apps/mobile/package.json` show up in `git status`.
+- **iOS is not verified.** The Android dev client was built and run on an emulator on 2026-11-06. `expo run:ios` has not been run, because the team's Mac has no full Xcode.
+- **Root scripts use the deprecated `--parallel` flag.** `dev`, `lint`, `typecheck`, `test` and the format scripts in the root `package.json` pass it to Turborepo. Turborepo 2.11.10 still ran the `^build` dependencies first in a no-cache timing check, but its docs do not guarantee that, so build the packages before starting Metro.
+- **Branch protection is not configured** on `main` (see [CONTRIBUTING.md](CONTRIBUTING.md#branch-protection)).
+
+## Troubleshooting
+
+Setup and runtime problems (Metro cannot resolve a package, old bundle, emulator offline, Java, disk space) are covered in [docs/LOCAL-DEVELOPMENT.md](docs/LOCAL-DEVELOPMENT.md#troubleshooting). CI failures are covered in [docs/DEVOPS-02-CI.md](docs/DEVOPS-02-CI.md#common-failures--fixes).
 
 ## Further Reading
 
-- [Expo Router Documentation](https://expo.dev/routing)
-- [Turborepo Task Caching](https://turbo.build/repo/docs/core-concepts/caching)
-- [pnpm Workspaces](https://pnpm.io/workspaces)
+- [Expo Router documentation](https://docs.expo.dev/router/introduction/)
+- [Expo development builds](https://docs.expo.dev/develop/development-builds/introduction/)
+- [Turborepo task caching](https://turbo.build/repo/docs/core-concepts/caching)
+- [pnpm workspaces](https://pnpm.io/workspaces)
 - [React Native Testing Library](https://testing-library.com/docs/react-native-testing-library/intro)
-- [GitHub Actions Workflows](.github/workflows) — CI/CD pipeline definitions
-
-
----
-
-**Questions?** Check CONTRIBUTING.md or the READMEs that exist: `apps/mobile/README.md`, `supabase/README.md` and `packages/claude/README.md`.
+- [Supabase CLI](https://supabase.com/docs/guides/cli)

@@ -1,83 +1,77 @@
 # Claude AI Skills Guide
 
-This document outlines all Claude AI-powered features integrated into the Sisig platform.
+This document lists the Claude AI features in the Sisig platform and what state each one is in on `main`.
 
 ## Overview
 
-The Sisig platform includes **7 major Claude AI skills** across the mobile app and shared packages. All skills are built on the `@sisig/claude` package, which provides:
+The repository has **7 Claude-related features** across the mobile app and the `@sisig/claude` package. None of them calls the Claude API from the app today:
 
-- **ClaudeClient** - Direct access to Claude API with streaming support
-- **ConversationManager** - Multi-turn conversation history management
-- **Utilities** - JSON parsing, text truncation, prompt building
+- The four AI screens in `apps/mobile/app/` are UI only and show fixed placeholder text.
+- The helpers in `packages/claude/src/` call the API, but only from Node, and the [known issues](packages/claude/README.md#known-issues) in that package (retired default model, `temperature` always sent) make live calls fail until `src/client.ts` changes.
+
+`@sisig/claude` provides:
+
+- **ClaudeClient**: chat, text generation and streaming over `@anthropic-ai/sdk` 0.24.3.
+- **ConversationManager**: in-memory message history with a size limit.
+- **Utilities**: JSON parsing, text truncation, a system prompt helper.
+
+> **Warning:** do not put an Anthropic API key in the mobile app. Expo inlines `EXPO_PUBLIC_*` variables into the JavaScript bundle, and anyone with the installed app can extract them. `ClaudeClient` reads `process.env.ANTHROPIC_API_KEY`, which Expo does not inline, so it throws in the app. That is the safe outcome; keep it that way.
+
+| # | Feature | Where | Status on `main` |
+|---|---------|-------|------------------|
+| 1 | AI Chat | `apps/mobile/app/ai-chat.tsx` | UI only, placeholder replies |
+| 2 | Text Summarizer | `apps/mobile/app/ai-summarizer.tsx` | UI only, placeholder summary |
+| 3 | Code Analyzer | `packages/claude/src/code-analyzer.ts` | Node helpers, affected by the known issues |
+| 4 | Image Analysis | `apps/mobile/src/hooks/useImageAnalysis.ts` | Stub, never calls the API, not used by any screen |
+| 5 | Translator | `packages/claude/src/translator.ts`, `apps/mobile/app/ai-translator.tsx` | Node helpers; the screen is UI only |
+| 6 | Documentation Generator | `packages/claude/src/doc-generator.ts` | Node helpers, affected by the known issues |
+| 7 | AI Journal | `apps/mobile/app/ai-journal.tsx` | UI only, placeholder insights |
+
+No screen links to the four AI routes (`/ai-chat`, `/ai-summarizer`, `/ai-translator`, `/ai-journal`).
 
 ## Skills Breakdown
 
 ### 1. AI Chat (`apps/mobile/app/ai-chat.tsx`)
 
-**Purpose:** Multi-turn conversations with Claude
+**Purpose:** multi-turn conversation with Claude.
 
-**Features:**
-- Real-time message streaming
-- Conversation history
-- Loading and error states
-- Type-safe message management
+**What it does today:**
+- Shows a message list, a text input and a Send button.
+- Adds each message to component state and to a `ConversationManager`.
+- Replies with a fixed placeholder message. There is no API call and no streaming.
+- Messages live in memory only and are lost when the screen unmounts.
 
-**Usage:**
-```typescript
-import AIChatScreen from 'apps/mobile/app/ai-chat';
-
-// User can have ongoing conversations with Claude
-// Messages are persisted in local state
-```
-
-**API:**
-```typescript
-const { chat } = useAI();
-await chat([{ role: 'user', content: 'Hello!' }]);
-```
+**Code it would use:** `useAI` from `apps/mobile/src/hooks/useAI.ts` exposes `chat(messages)`, but the screen does not use it, and it cannot run in the app without a key in the bundle (see the warning above).
 
 ---
 
 ### 2. Text Summarizer (`apps/mobile/app/ai-summarizer.tsx`)
 
-**Purpose:** Condense long documents into key points
+**Purpose:** condense long text into key points.
 
-**Features:**
-- Paste any text
-- Get Claude-powered summary
-- Track compression ratio
-- Compare original vs summary side-by-side
+**What it does today:**
+- Takes pasted text and shows a fixed placeholder summary.
+- Shows the original length, the summary length and a compression percentage.
+- Makes no API call.
 
-**Usage:**
+**Node equivalent:**
 ```typescript
-import AISummarizerScreen from 'apps/mobile/app/ai-summarizer';
+import { ClaudeClient } from '@sisig/claude';
 
-// User pastes article/document
-// Claude generates concise summary
-// Shows compression statistics
-```
-
-**API:**
-```typescript
-const summary = await client.generateText(
-  `Summarize: ${longText}`,
-  { maxTokens: 500 }
-);
+const client = new ClaudeClient();
+const summary = await client.generateText(`Summarize: ${longText}`, {
+  model: '<model id>', // the default model is retired
+  maxTokens: 500,
+});
 ```
 
 ---
 
 ### 3. Code Analyzer (`packages/claude/src/code-analyzer.ts`)
 
-**Purpose:** Analyze, document, and improve code
+**Purpose:** review, document, refactor and explain code.
 
-**Features:**
-- Code review (bugs, performance, style)
-- Auto-generate documentation
-- Suggest refactoring improvements
-- Explain code in simple terms
-
-**Usage:**
+**Exports:**
 ```typescript
 import {
   analyzeCode,
@@ -86,98 +80,50 @@ import {
   explainCode,
 } from '@sisig/claude';
 
-// Analyze code for issues
-const analysis = await analyzeCode(codeString, 'typescript');
-console.log(analysis.issues);     // Bug list
-console.log(analysis.improvements); // Suggestions
+// Each takes (code, language = 'typescript')
+const analysis = await analyzeCode(codeString, 'typescript'); // Promise<CodeAnalysis>
+console.log(analysis.issues);
+console.log(analysis.improvements);
 
-// Generate docs for function
-const docs = await generateCodeDocumentation(codeString);
-
-// Get refactoring suggestions
-const suggestions = await suggestRefactoring(codeString);
-
-// Explain to junior developers
-const explanation = await explainCode(codeString);
+const docs = await generateCodeDocumentation(codeString); // Promise<string>
+const suggestions = await suggestRefactoring(codeString); // Promise<string>
+const explanation = await explainCode(codeString); // Promise<string>
 ```
 
 **Returns:**
 ```typescript
 interface CodeAnalysis {
-  issues: string[];           // Found bugs/issues
-  improvements: string[];     // Suggestions
-  summary: string;            // Code overview
+  issues: string[];
+  improvements: string[];
+  summary: string;
 }
 ```
+
+`analyzeCode` asks for JSON and extracts it with the greedy pattern `/\{[\s\S]*\}/`, which spans from the first `{` to the last `}` in the reply, so a reply with two JSON objects fails to parse. Each function creates its own `ClaudeClient`, so it reads `ANTHROPIC_API_KEY` from the environment and uses the retired default model.
 
 ---
 
 ### 4. Image Analysis (`apps/mobile/src/hooks/useImageAnalysis.ts`)
 
-**Purpose:** Analyze and describe images (vision model ready)
+**Purpose:** describe an image with a Claude vision model. Not implemented.
 
-**Features:**
-- Upload image from camera or gallery
-- Claude vision model describes image
-- Works with base64 image encoding
-- Ready for Claude 3 vision models
+**What the hook does today:**
+- `analyzeImage(uri)` fetches the URI and reads it as a data URL with `FileReader`.
+- It then sets a fixed message, "Image analysis feature requires Claude vision model setup.", and never calls the API.
+- It returns `description`, `loading`, `error`, `analyzeImage` and `reset`.
+- No screen uses it, and the app has no camera or image picker dependency.
 
-**Usage:**
-```typescript
-import { useImageAnalysis } from 'src/hooks/useImageAnalysis';
-
-function MyComponent(): JSX.Element {
-  const { description, loading, analyzeImage } = useImageAnalysis();
-
-  const handlePickImage = async (uri: string): Promise<void> => {
-    await analyzeImage(uri);
-  };
-
-  return (
-    <View>
-      <Button title="Analyze" onPress={() => handlePickImage(uri)} />
-      {loading && <ActivityIndicator />}
-      {description && <Text>{description}</Text>}
-    </View>
-  );
-}
-```
-
-**Vision Model Setup:**
-```typescript
-// In packages/claude/src/client.ts, add vision support:
-const response = await client.messages.create({
-  model: 'claude-3-5-sonnet-20241022',
-  max_tokens: 1024,
-  messages: [{
-    role: 'user',
-    content: [
-      {
-        type: 'image',
-        source: { type: 'base64', media_type: 'image/jpeg', data: base64 }
-      },
-      { type: 'text', text: 'Describe this image' }
-    ]
-  }]
-});
-```
+**What a real version needs:** `ClaudeClient.chat` only accepts string message content, so sending an image needs a change to `packages/claude/src/client.ts`. The key restriction above still applies, so the call would have to happen outside the app.
 
 ---
 
 ### 5. Translator (`packages/claude/src/translator.ts`)
 
-**Purpose:** Multi-language text translation
+**Purpose:** translate text between languages.
 
-**Features:**
-- Translate between 10+ languages
-- Automatic language detection
-- Batch translations
-- Preserve tone and style
+**Supported languages** (`SUPPORTED_LANGUAGES`): English, Spanish, French, German, Japanese, Chinese, Korean, Portuguese, Russian, Arabic.
 
-**Supported Languages:**
-English, Spanish, French, German, Japanese, Chinese, Korean, Portuguese, Russian, Arabic
-
-**Usage:**
+**Exports:**
 ```typescript
 import {
   translateText,
@@ -186,49 +132,33 @@ import {
   SUPPORTED_LANGUAGES,
 } from '@sisig/claude';
 
-// Translate single text
-const result = await translateText(
-  'Hello world',
-  'English',
-  'Spanish'
-);
-console.log(result.translated); // 'Hola mundo'
+// Defaults: from English to Spanish
+const result = await translateText('Hello world', 'English', 'Spanish');
+console.log(result.translated);
 
-// Detect language
+// Returns the model's one-word answer, cast to Language without checking
 const lang = await detectLanguage('Bonjour');
-console.log(lang); // 'French'
 
-// Translate to multiple languages
-const results = await translateToMultipleLanguages(
-  'Hello',
-  'English',
-  ['Spanish', 'French', 'German']
-);
-
-// See all supported languages
-console.log(SUPPORTED_LANGUAGES);
+// One request per target language, sent in parallel
+const results = await translateToMultipleLanguages('Hello', 'English', [
+  'Spanish',
+  'French',
+  'German',
+]);
 ```
 
 **Mobile UI** (`apps/mobile/app/ai-translator.tsx`):
-- Language selection dropdown
-- Swap source/target languages
-- Real-time translation
-- Show original and translated side-by-side
+- "From" and "To" language pickers built from `SUPPORTED_LANGUAGES`.
+- A swap button.
+- Translate shows placeholder text that repeats the input. There is no API call.
 
 ---
 
 ### 6. Documentation Generator (`packages/claude/src/doc-generator.ts`)
 
-**Purpose:** Automate documentation generation for projects
+**Purpose:** generate documentation text from code or a description.
 
-**Features:**
-- Generate API documentation (Markdown, HTML, JSDoc, Sphinx)
-- Create comprehensive README files
-- Generate test case templates
-- Auto-generate CHANGELOG entries
-- Create CONTRIBUTING guides
-
-**Usage:**
+**Exports:**
 ```typescript
 import {
   generateAPIDocs,
@@ -238,77 +168,39 @@ import {
   generateContributingGuide,
 } from '@sisig/claude';
 
-// Generate API docs
+// style: 'markdown' | 'html' | 'jsdoc' | 'sphinx'
 const docs = await generateAPIDocs(code, {
   style: 'markdown',
   includeExamples: true,
   includeTypeInfo: true,
 });
 
-// Generate README
 const readme = await generateREADME(
   'A simple calculator library',
   ['Add', 'Subtract', 'Multiply', 'Divide'],
-  'npm install calculator'
+  'npm install calculator',
 );
 
-// Generate tests
+// framework: 'jest' | 'mocha' | 'pytest'
 const tests = await generateTestCases(code, 'jest');
 
-// Generate changelog
-const changelog = await generateChangelog(
-  '1.1.0',
-  '1.0.0',
-  ['Added feature X', 'Fixed bug Y']
-);
+const changelog = await generateChangelog('1.1.0', '1.0.0', ['Added feature X', 'Fixed bug Y']);
 
-// Generate contributing guide
-const guide = await generateContributingGuide(
-  'MyProject',
-  ['TypeScript', 'React', 'Node.js']
-);
+const guide = await generateContributingGuide('MyProject', ['TypeScript', 'React', 'Node.js']);
 ```
+
+Each function returns a string and creates its own `ClaudeClient`.
 
 ---
 
 ### 7. AI Journal (`apps/mobile/app/ai-journal.tsx`)
 
-**Purpose:** Personal journaling with AI insights
+**Purpose:** journaling with AI insights.
 
-**Features:**
-- Write daily thoughts and experiences
-- Claude analyzes emotional themes
-- Get insights on mood and topics
-- Review past entries with timestamps
-- Sentiment analysis
-
-**Usage:**
-```typescript
-import AIJournalScreen from 'apps/mobile/app/ai-journal';
-
-// User writes journal entry
-// Claude provides:
-// - Emotion recognition
-// - Theme identification
-// - Sentiment analysis
-// - Personal growth insights
-
-// Entries saved with timestamps
-// Easy review of past journals
-```
-
-**Example Insights:**
-```
-Key themes in your entry:
-- Emotion: Thoughtful and reflective
-- Topics: Personal growth, learning
-- Sentiment: Positive with opportunities
-
-Suggested reflection:
-- Consider these patterns over time
-- Build on your strengths
-- Address challenges systematically
-```
+**What it does today:**
+- Saves each entry with a timestamp to component state, newest first.
+- Attaches the same fixed placeholder "insights" text to every entry. There is no emotion, theme or sentiment analysis.
+- Entries are lost when the screen unmounts.
 
 ---
 
@@ -316,78 +208,48 @@ Suggested reflection:
 
 ### useAI Hook (React)
 
-Generic hook for using Claude in any component:
+`apps/mobile/src/hooks/useAI.ts` returns `response`, `loading`, `error`, `generate(prompt)`, `chat(messages)` and `reset()`, and takes `{ apiKey?, systemPrompt? }`.
 
-```typescript
-import { useAI } from 'apps/mobile/src/hooks/useAI';
-
-function MyComponent(): JSX.Element {
-  const { response, loading, error, generate, chat, reset } = useAI({
-    apiKey: process.env.ANTHROPIC_API_KEY,
-    systemPrompt: 'You are a helpful assistant.',
-  });
-
-  return (
-    <View>
-      <Button
-        title="Ask"
-        onPress={() => generate('Your question')}
-      />
-      {loading && <ActivityIndicator />}
-      {response && <Text>{response}</Text>}
-      {error && <Text style={{ color: 'red' }}>{error}</Text>}
-    </View>
-  );
-}
-```
+No screen uses it. It creates a `new ClaudeClient(options.apiKey)` on every render, so in the app it throws during render unless a key is passed, and passing a key from app code puts the key in the bundle. Treat the hook as an interface sketch, not something to wire up as it is.
 
 ### ClaudeClient (Direct)
 
-For backend/server-side usage:
+For Node scripts or a server:
 
 ```typescript
 import { ClaudeClient } from '@sisig/claude';
 
 const client = new ClaudeClient(process.env.ANTHROPIC_API_KEY);
 
-// Chat
-const response = await client.chat(
-  [{ role: 'user', content: 'Hello' }],
-  { maxTokens: 500, temperature: 0.7 }
-);
-
-// Generate text
-const text = await client.generateText('Write a poem', {
-  maxTokens: 300,
+const response = await client.chat([{ role: 'user', content: 'Hello' }], {
+  model: '<model id>',
+  maxTokens: 500,
 });
 
-// Stream responses
+const text = await client.generateText('Write a poem', { model: '<model id>', maxTokens: 300 });
+
 await client.streamChat(
   [{ role: 'user', content: 'Tell me a story' }],
-  (chunk) => console.log(chunk)
+  (chunk) => console.log(chunk),
+  { model: '<model id>' },
 );
 ```
 
-### Conversation Manager
+Every request also sends `temperature` (default 0.7). According to Anthropic's docs, Claude Opus 4.7 and later and the 5.x models reject a non-default `temperature`. See the [package README](packages/claude/README.md#known-issues).
 
-Manage multi-turn conversations:
+### Conversation Manager
 
 ```typescript
 import { ConversationManager } from '@sisig/claude';
 
-const manager = new ConversationManager(20); // Max 20 messages
+const manager = new ConversationManager(20); // max 20 messages, the default
 
-// Add messages
 manager.addMessage('user', 'What is AI?');
 manager.addMessage('assistant', 'AI is...');
 
-// Get for API
-const messages = manager.getMessages();
+const messages = manager.getMessages(); // for chat()
+const history = manager.getHistory(); // with timestamps
 
-// Get full history
-const history = manager.getHistory(); // With timestamps
-
-// Reset
 manager.clear();
 ```
 
@@ -395,43 +257,34 @@ manager.clear();
 
 ## Setup & Configuration
 
-### 1. Set API Key
+### 1. Set the API Key (Node only)
 
 ```bash
-# Environment variable
 export ANTHROPIC_API_KEY=sk-ant-...
-
-# Or in .env.local
-echo "ANTHROPIC_API_KEY=sk-ant-..." > .env.local
 ```
+
+The package does not read `.env` or `.env.local` files, so the key must be in the environment of the Node process, or passed to the `ClaudeClient` constructor. Never put it in `apps/mobile/.env.local`.
 
 ### 2. Install & Build
 
 ```bash
-# From root
+# From the repository root
 pnpm install
-
-# Build Claude package
 pnpm -F @sisig/claude build
 ```
 
-### 3. Run Mobile App
+### 3. Run the Mobile App
+
+The app needs a development build; Expo Go is not supported. See [apps/mobile/README.md](apps/mobile/README.md) and [docs/LOCAL-DEVELOPMENT.md](docs/LOCAL-DEVELOPMENT.md). The AI screens show placeholder text whether or not a key is set.
+
+### 4. Run the Tests
 
 ```bash
-pnpm dev
-
-# Scan QR code with Expo Go or development client
-```
-
-### 4. Test Claude Features
-
-```bash
-# Test Claude package
 pnpm -F @sisig/claude test
-
-# Test mobile app
 pnpm -F @sisig/mobile test
 ```
+
+The translator, code-analyzer and doc-generator tests call the real API when `ANTHROPIC_API_KEY` is set in your shell. Run `env -u ANTHROPIC_API_KEY pnpm -F @sisig/claude test` to keep them offline.
 
 ---
 
@@ -440,19 +293,21 @@ pnpm -F @sisig/mobile test
 ### 1. API Key Security
 
 ```typescript
-// ✅ Good: Use environment variable
-const apiKey = process.env.ANTHROPIC_API_KEY;
-const client = new ClaudeClient(apiKey);
+// Good: a Node process reads the key from its environment
+const client = new ClaudeClient(process.env.ANTHROPIC_API_KEY);
 
-// ❌ Bad: Hardcode API key
+// Bad: a key written in source code
 const client = new ClaudeClient('sk-ant-xxx');
 ```
+
+- Never commit a key. CI runs gitleaks, and a separate `git grep` step in `.github/workflows/ci.yml` fails on a string that looks like an Anthropic key in `apps/` or `packages/`.
+- Never ship a key in the mobile bundle, including through an `EXPO_PUBLIC_` variable.
 
 ### 2. Error Handling
 
 ```typescript
 try {
-  const response = await client.generateText(prompt);
+  const text = await client.generateText(prompt, { model: '<model id>' });
 } catch (error) {
   if (error instanceof Error) {
     console.error('Claude API error:', error.message);
@@ -460,69 +315,49 @@ try {
 }
 ```
 
-### 3. Rate Limiting
+### 3. Retries
 
-```typescript
-// Implement retry logic with exponential backoff
-async function withRetry<T>(
-  fn: () => Promise<T>,
-  maxRetries = 3
-): Promise<T> {
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      return await fn();
-    } catch (error) {
-      if (i === maxRetries - 1) throw error;
-      await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
-    }
-  }
-  throw new Error('Max retries exceeded');
-}
-```
+The SDK already retries 408, 409, 429 and 5xx responses and connection errors twice by default. Do not wrap calls in a loop that also retries 400-level errors, which fail the same way every time.
 
 ### 4. Type Safety
 
-```typescript
-// ✅ Always type responses
-interface CodeAnalysis {
-  issues: string[];
-  improvements: string[];
-  summary: string;
-}
+The helpers are typed. `analyzeCode` already returns `Promise<CodeAnalysis>`, so no cast is needed:
 
-const analysis = await analyzeCode(code) as CodeAnalysis;
+```typescript
+const analysis = await analyzeCode(code);
+analysis.issues.forEach((issue) => console.log(issue));
 ```
 
 ---
 
 ## Performance Tips
 
-1. **Cache responses** - Store summaries, translations, analysis results
-2. **Batch requests** - Use `translateToMultipleLanguages` for multiple translations
-3. **Stream responses** - Use `streamChat` for long-running tasks
-4. **Limit context** - ConversationManager keeps only recent messages
-5. **Set max tokens** - Specify `maxTokens` to control response length
+1. **Cache results** you will reuse, such as translations or summaries.
+2. **Parallel translations:** `translateToMultipleLanguages` sends one request per language at the same time. It does not use the Message Batches API.
+3. **Stream long replies** with `streamChat`.
+4. **Limit context:** `ConversationManager` keeps only the most recent messages.
+5. **Set `maxTokens`** to control reply length. The default is 1024.
 
 ---
 
-## Future Enhancements
+## Not Built Yet
 
-- [ ] Prompt caching for repeated queries
-- [ ] Function calling for tool use
-- [ ] Batch API for document processing
-- [ ] Custom fine-tuned models
-- [ ] Vision model support (Claude 3)
-- [ ] Audio transcription (Whisper integration)
+There are no Jira tickets for these in the repository:
+
+- Real API calls from the AI screens, which need a server-side caller so the key stays out of the app.
+- Image input (`useImageAnalysis` is a stub, and `chat` accepts text only).
+- Streaming in the mobile UI.
+- Fixing the [known issues](packages/claude/README.md#known-issues) in `packages/claude/src/client.ts`.
 
 ---
 
 ## Resources
 
-- [Anthropic Documentation](https://docs.anthropic.com)
-- [Claude Models](https://www.anthropic.com/models)
-- [API Pricing](https://www.anthropic.com/pricing)
-- [@sisig/claude Package](./packages/claude/README.md)
-- [Mobile App README](./apps/mobile/README.md)
+- [Claude API documentation](https://platform.claude.com/docs)
+- [Models overview](https://platform.claude.com/docs/en/about-claude/models/overview)
+- [Pricing](https://platform.claude.com/docs/en/about-claude/pricing)
+- [@sisig/claude package](packages/claude/README.md)
+- [Mobile app README](apps/mobile/README.md)
 
 ---
 

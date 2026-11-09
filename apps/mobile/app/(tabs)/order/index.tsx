@@ -1,5 +1,7 @@
 import { View, ScrollView, FlatList, StyleSheet } from 'react-native';
 import { Button, Text, useThemedStyles, type AppColors } from '@sisig/ui';
+import { OrderingPausedCard } from '../../../src/components/OrderingPausedCard';
+import { useFeature } from '../../../src/config/useFeature';
 
 const SAMPLE_ITEMS = [
   { id: '1', name: 'Classic Burger', price: '$12.99' },
@@ -60,6 +62,19 @@ const createStyles = (c: AppColors) =>
 
 export default function OrderScreen(): JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const ordering = useFeature('ordering');
+
+  // Kill switch (PLAT-06): while ordering is off, hide the menu and checkout entry points.
+  if (!ordering.enabled) {
+    return (
+      <ScrollView style={styles.container}>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Place an Order</Text>
+        </View>
+        <OrderingPausedCard message={ordering.message} />
+      </ScrollView>
+    );
+  }
 
   return (
     <ScrollView style={styles.container}>

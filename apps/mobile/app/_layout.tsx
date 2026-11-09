@@ -5,6 +5,8 @@ import { useFonts } from 'expo-font';
 import { Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { AppThemeProvider } from '../src/components/AppThemeProvider';
+import { ForcedUpdateScreen } from '../src/components/ForcedUpdateScreen';
+import { RemoteConfigProvider, useRemoteConfig } from '../src/config/remote-config';
 import { SessionProvider, useSession, type SessionStatus } from '../src/session/session';
 import { createSupabaseSessionSource } from '../src/session/supabase-source';
 import { persistOptions } from '../src/lib/query-persistence';
@@ -20,9 +22,11 @@ export default function RootLayout(): JSX.Element {
   return (
     <AppThemeProvider>
       <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
-        <SessionProvider source={sessionSource}>
-          <RootNavigator />
-        </SessionProvider>
+        <RemoteConfigProvider client={supabase}>
+          <SessionProvider source={sessionSource}>
+            <RootNavigator />
+          </SessionProvider>
+        </RemoteConfigProvider>
       </PersistQueryClientProvider>
     </AppThemeProvider>
   );
@@ -33,12 +37,18 @@ function RootNavigator(): JSX.Element | null {
   const segments = useSegments();
   const params = useGlobalSearchParams();
   const previousStatus = useRef<SessionStatus>(status);
+  const remoteConfig = useRemoteConfig();
+  const { updateGate } = remoteConfig;
+  // Forced update (PLAT-06): shown instead of the navigator, so there is nothing to dismiss.
+  const isBlocked = updateGate.status === 'blocked';
 
   // Keys must match brandFonts in @sisig/ui. The splash screen stays up until the session
-  // is known and the fonts have loaded, so the first visible frame already uses them.
+  // is known, the fonts have loaded and the remote config has read its disk cache, so the
+  // first visible frame already uses the fonts and a cached forced update shows straight away.
   // If font loading fails we continue with the system font rather than blocking the app.
   const [fontsLoaded, fontError] = useFonts({ Inter_400Regular, Inter_600SemiBold });
-  const isReady = status !== 'loading' && (fontsLoaded || fontError !== null);
+  const isReady =
+    status !== 'loading' && (fontsLoaded || fontError !== null) && remoteConfig.isReady;
 
   // The navigator mounts only once the session and fonts are ready, so no stack flashes on cold start.
   useEffect(() => {
@@ -51,27 +61,32 @@ function RootNavigator(): JSX.Element | null {
   }, [isReady]);
 
   // Signing out clears every stack and shows the auth stack.
+  // Skipped while blocked: no navigator is mounted, and the stack restarts when unblocked.
   useEffect(() => {
     const wasSignedIn = previousStatus.current === 'signed-in';
     previousStatus.current = status;
 
-    if (wasSignedIn && status === 'signed-out') {
+    if (wasSignedIn && status === 'signed-out' && !isBlocked) {
       router.dismissAll();
       router.replace('/welcome');
     }
-  }, [status]);
+  }, [status, isBlocked]);
 
   const redirectTo = resolveAuthRedirect({ status, segments, returnTo: params.returnTo });
 
   // Redirects wait for isReady so no navigation runs before the navigator is mounted.
   useEffect(() => {
-    if (isReady && redirectTo !== null) {
+    if (isReady && !isBlocked && redirectTo !== null) {
       router.replace(redirectTo);
     }
-  }, [isReady, redirectTo]);
+  }, [isReady, isBlocked, redirectTo]);
 
   if (!isReady) {
     return null;
+  }
+
+  if (updateGate.status === 'blocked') {
+    return <ForcedUpdateScreen storeUrl={updateGate.storeUrl} />;
   }
 
   return (

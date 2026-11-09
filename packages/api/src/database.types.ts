@@ -5,7 +5,21 @@ export type Database = {
   
   "public": {
           Tables: {
-            "locations": {
+            "app_config": {
+                  Row: {
+                    "description": string,"key": string,"updated_at": string,"value": NonNullable<Json>
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "description": string,"key": string,"updated_at"?: string,"value": NonNullable<Json>
+                  }
+                  Update: {
+                    "description"?: string,"key"?: string,"updated_at"?: string,"value"?: NonNullable<Json>
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"locations": {
                   Row: {
                     "address": string,"created_at": string,"hours": NonNullable<Json>,"id": string,"latitude": number,"longitude": number,"name": string,"ordering_enabled": boolean,"phone_e164": string | null,"pickup_lead_time_minutes": number,"pos_location_id": string | null,"pos_type": Database["public"]['Enums']["pos_type"] | null,"timezone": string,"uber_eats_url": string | null,"updated_at": string
                   }
